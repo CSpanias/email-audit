@@ -58,7 +58,6 @@ send_spoof() {
     echo -e "\n${YELLOW}[Spoofing Test]${NC}" | tee -a "$OUTPUT_FILE"
     echo "[*] Spoofing as ceo@$DOMAIN → $TARGET_EMAIL" | tee -a "$OUTPUT_FILE"
 
-    # Start postfix if not running
     if ! systemctl is-active --quiet postfix; then
         echo "[*] Starting postfix..." | tee -a "$OUTPUT_FILE"
         sudo systemctl start postfix
@@ -88,15 +87,21 @@ process_domain() {
     echo -e "\n${YELLOW}[SPF]${NC}" | tee -a "$OUTPUT_FILE"
     SPF=$(dig +short "$DOMAIN" TXT | grep '^"v=spf1')
 
-    [[ -n "$SPF" ]] && echo -e "${GREEN}$SPF${NC}" | tee -a "$OUTPUT_FILE" \
-        || echo -e "${RED}No SPF record found${NC}" | tee -a "$OUTPUT_FILE"
+    if [[ -n "$SPF" ]]; then
+        echo -e "${GREEN}$SPF${NC}" | tee -a "$OUTPUT_FILE"
+    else
+        echo -e "${RED}No SPF record found${NC}" | tee -a "$OUTPUT_FILE"
+    fi
 
     # DMARC
     echo -e "\n${YELLOW}[DMARC]${NC}" | tee -a "$OUTPUT_FILE"
     DMARC=$(dig +short "_dmarc.$DOMAIN" TXT)
 
-    [[ -n "$DMARC" ]] && echo -e "${GREEN}$DMARC${NC}" | tee -a "$OUTPUT_FILE" \
-        || echo -e "${RED}No DMARC record found${NC}" | tee -a "$OUTPUT_FILE"
+    if [[ -n "$DMARC" ]]; then
+        echo -e "${GREEN}$DMARC${NC}" | tee -a "$OUTPUT_FILE"
+    else
+        echo -e "${RED}No DMARC record found${NC}" | tee -a "$OUTPUT_FILE"
+    fi
 
     # MTA-STS
     echo -e "\n${YELLOW}[MTA-STS DNS]${NC}" | tee -a "$OUTPUT_FILE"
@@ -119,7 +124,9 @@ process_domain() {
     SPF_STRICT=false
 
     if [[ -n "$SPF" ]]; then
-        [[ "$SPF" == *"~all"* ]] && echo -e "${RED}SPF softfail (~all)${NC}" | tee -a "$OUTPUT_FILE"
+        if [[ "$SPF" == *"~all"* ]]; then
+            echo -e "${RED}SPF softfail (~all)${NC}" | tee -a "$OUTPUT_FILE"
+        fi
         if [[ "$SPF" == *"-all"* ]]; then
             echo -e "${GREEN}SPF strict (-all)${NC}" | tee -a "$OUTPUT_FILE"
             SPF_STRICT=true
@@ -156,14 +163,16 @@ process_domain() {
         echo -e "${RED}Weak / no enforcement (spoofing likely)${NC}" | tee -a "$OUTPUT_FILE"
     fi
 
+    # -------------------------
     # Spoofing
+    # -------------------------
     if [[ "$SPOOF" == true ]]; then
         send_spoof "$DOMAIN"
     fi
 }
 
 # -------------------------
-# Parse arguments
+# Argument Parsing
 # -------------------------
 if [[ $# -eq 0 ]]; then
     usage
@@ -173,3 +182,38 @@ INPUT=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --spoof)
+            SPOOF=true
+            shift
+            ;;
+        --to)
+            TARGET_EMAIL="$2"
+            shift 2
+            ;;
+        *)
+            INPUT="$1"
+            shift
+            ;;
+    esac
+done
+
+# Safety check
+if [[ "$SPOOF" == true && -z "$TARGET_EMAIL" ]]; then
+    echo "[-] --spoof requires --to <email>"
+    exit 1
+fi
+
+# -------------------------
+# Execution
+# -------------------------
+if [[ -f "$INPUT" ]]; then
+    while read -r domain; do
+        [[ -z "$domain" ]] && continue
+        valid_domain "$domain" && process_domain "$domain"
+    done < "$INPUT"
+else
+    valid_domain "$INPUT" || usage
+    process_domain "$INPUT"
+fi
+
+echo -e "\n[+] Results saved to: $OUTPUT_FILE"
