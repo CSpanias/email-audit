@@ -2,7 +2,7 @@
 
 A Python-based tool designed to make email configuation reviews more efficient.
 
-Developed as an educational tool to accompany the [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/assessing-email-security/) article. 
+Developed as an educational tool to accompany [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/email-security-explained/). 
 
 It analyses common email security mechanisms and provides a structured assessment consisting of:
 
