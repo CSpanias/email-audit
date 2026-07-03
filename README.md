@@ -2,7 +2,7 @@
 
 A Python-based tool designed to make email configuation reviews more efficient.
 
-Developed mostly as an educational tool to accompany the [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/assessing-email-security/) article. 
+Developed as an educational tool to accompany the [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/assessing-email-security/) article. 
 
 It analyses common email security mechanisms and provides a structured assessment consisting of:
 
@@ -33,7 +33,7 @@ Assessment
 * Extract DKIM signing domain and selector
 * Validate whether DNS controls are actually being used in practice
 
-### *Spoofing Validation* (Currently not implemented - WIP)
+### ~~*Spoofing Validation*~~ (Currently not implemented - WIP)
 
 * Optional spoofing tests using `swaks`
 * Local SMTP relay support via Postfix
@@ -64,7 +64,7 @@ Example:
 python3 email-audit.py hackthebox.com --eml htb-email.eml
 ```
 
-### *Spoofing Test* (Currently not implemented - WIP)
+### ~~*Spoofing Test*~~ (Currently not implemented - WIP)
 
 ```bash
 python3 email-audit.py <domain> --spoof --to <recipient>
@@ -114,7 +114,7 @@ DKIM Details:
 * Python 3
 * dig
 
-### *Optional* (Currently not implemented - WIP)
+### ~~*Optional*~~ (Currently not implemented - WIP)
 
 * swaks (spoofing tests)
 * postfix (local SMTP relay)
@@ -135,7 +135,7 @@ The tool follows the same process typically used during an email security review
    * SPF outcomes
    * DMARC outcomes
 
-3. *Practical validation* (Currently not implemented - WIP)
+3. ~~*Practical validation*~~ (Currently not implemented - WIP)
    * Controlled spoofing tests
 
 ## Limitations
