@@ -1,6 +1,6 @@
 # Email-Audit
 
-A Python-based email security assessment tool designed to assist with external assessments, security reviews, and email spoofing evaluations. The tool analyses common email security mechanisms and provides a structured assessment consisting of:
+A Python-based email security assessment tool designed to make email configuation reviews more efficient. Developed mostly as an educational tool to accompany the [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/assessing-email-security/) article. It analyses common email security mechanisms and provides a structured assessment consisting of:
 
 ```text
 Raw Record
@@ -20,7 +20,7 @@ Assessment
 * DMARC discovery and policy analysis
 * DKIM detection using common selectors
 * MTA-STS detection
-* Security posture scoring
+* *Security posture scoring* (Pretty arbitrary for now - WIP)
 
 ### Email Analysis
 
@@ -29,7 +29,7 @@ Assessment
 * Extract DKIM signing domain and selector
 * Validate whether DNS controls are actually being used in practice
 
-### Spoofing Validation
+### *Spoofing Validation* (Currently not implemented - WIP)
 
 * Optional spoofing tests using `swaks`
 * Local SMTP relay support via Postfix
@@ -60,7 +60,7 @@ Example:
 python3 email-audit.py hackthebox.com --eml htb-email.eml
 ```
 
-### Spoofing Test
+### *Spoofing Test* (Currently not implemented - WIP)
 
 ```bash
 python3 email-audit.py <domain> --spoof --to <recipient>
@@ -110,7 +110,7 @@ DKIM Details:
 * Python 3
 * dig
 
-### Optional
+### *Optional* (Currently not implemented - WIP)
 
 * swaks (spoofing tests)
 * postfix (local SMTP relay)
@@ -131,7 +131,7 @@ The tool follows the same process typically used during an email security review
    * SPF outcomes
    * DMARC outcomes
 
-3. Practical validation
+3. *Practical validation* (Currently not implemented - WIP)
    * Controlled spoofing tests
 
 ## Limitations
