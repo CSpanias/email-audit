@@ -1,44 +1,151 @@
-# Email Check
-A simple Bash script for performing email security configuration checks during external assessments.
+# Email-Audit
+
+A Python-based email security assessment tool designed to assist with external assessments, security reviews, and email spoofing evaluations. The tool analyses common email security mechanisms and provides a structured assessment consisting of:
+
+```text
+Raw Record
+    ↓
+Breakdown
+    ↓
+Security Impact
+    ↓
+Assessment
+````
 
 ## Features
 
-- SPF record lookup and validation
-- DMARC policy detection
-- MTA-STS record and policy retrieval
-- Basic alignment assessment (SPF + DMARC)
-- Optional spoofing test using swaks
-- Supports single domains or bulk input
+### DNS Analysis
+
+* SPF discovery and assessment
+* DMARC discovery and policy analysis
+* DKIM detection using common selectors
+* MTA-STS detection
+* Security posture scoring
+
+### Email Analysis
+
+* Parse `.eml` files
+* Extract SPF, DKIM, and DMARC authentication results
+* Extract DKIM signing domain and selector
+* Validate whether DNS controls are actually being used in practice
+
+### Spoofing Validation
+
+* Optional spoofing tests using `swaks`
+* Local SMTP relay support via Postfix
 
 ## Usage
 
-```bash
-./email-dns-check.sh <domain>
-./email-dns-check.sh <file_with_domains>
-./email-dns-check.sh <domain> --spoof --to <email>
+### DNS Review
 
-# Examples
-./email-dns-check.sh example.com
-./email-dns-check.sh domains.txt
-./email-dns-check.sh example.com --spoof --to lab@domain.local
+```bash
+python3 email-audit.py <domain>
+```
+
+Example:
+
+```bash
+python3 email-audit.py google.com
+```
+
+### Email Header Analysis
+
+```bash
+python3 email-audit.py <domain> --eml <email_file>
+```
+
+Example:
+
+```bash
+python3 email-audit.py hackthebox.com --eml htb-email.eml
+```
+
+### Spoofing Test
+
+```bash
+python3 email-audit.py <domain> --spoof --to <recipient>
+```
+
+Example:
+
+```bash
+python3 email-audit.py example.com --spoof --to lab@example.net
+```
+
+## Example Output
+
+```text
+=== SPF ===
+
+Raw Record:
+v=spf1 include:_spf.google.com ~all
+
+Breakdown:
+    - include:_spf.google.com → Authorised third-party provider
+    - ~all → SPF enforcement policy
+
+Security Impact:
+    Unauthorised senders may still be accepted by some recipients.
+
+Assessment:
+    ACCEPTABLE
+```
+
+```text
+=== OBSERVED AUTHENTICATION RESULTS ===
+
+SPF:   PASS
+DKIM:  PASS
+DMARC: PASS
+
+DKIM Details:
+    Signing Domain: hackthebox.com
+    Selector: google
 ```
 
 ## Requirements
 
-- dig
-- curl
-- swaks (for spoofing)
-- postfix (local SMTP relay required for spoofing)
+### Core
 
+* Python 3
+* dig
 
-## Output
+### Optional
 
-- Results are printed to the terminal
-- A log file is also created (email_check_<timestamp>.log)
+* swaks (spoofing tests)
+* postfix (local SMTP relay)
 
+## Assessment Methodology
 
-## Notes
+The tool follows the same process typically used during an email security review:
 
-- Alignment assessment is based on DNS configuration only
-- Full validation requires header analysis and spoofing testing
-- Spoofing must only be performed in authorised environments
+1. DNS analysis
+   * SPF
+   * DKIM
+   * DMARC
+   * MTA-STS
+
+2. Email analysis
+   * Authentication-Results
+   * DKIM-Signature
+   * SPF outcomes
+   * DMARC outcomes
+
+3. Practical validation
+   * Controlled spoofing tests
+
+## Limitations
+
+* DKIM detection is currently based on common selector enumeration.
+* DNS-based DKIM detection confirms support for DKIM but does not confirm implementation.
+* Full validation requires inspection of a real email (`.eml`) file.
+* Spoofing tests must only be performed against authorised targets.
+
+## Roadmap
+
+* Improved DKIM selector discovery
+* MTA-STS policy retrieval and validation
+* Enhanced scoring based on observed authentication results
+* Microsoft Outlook (`.msg`) support
+* TLS-RPT analysis
+* Exportable assessment reports in `.xml` format
