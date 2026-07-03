@@ -2,7 +2,9 @@
 
 A Python-based tool designed to make email configuation reviews more efficient.
 
-Developed mostly as an educational tool to accompany the [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/assessing-email-security/) article. It analyses common email security mechanisms and provides a structured assessment consisting of:
+Developed mostly as an educational tool to accompany the [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/assessing-email-security/) article. 
+
+It analyses common email security mechanisms and provides a structured assessment consisting of:
 
 ```text
 Raw Record
@@ -22,7 +24,7 @@ Assessment
 * DMARC discovery and policy analysis
 * DKIM detection using common selectors
 * MTA-STS detection
-* *Security posture scoring* (Pretty arbitrary for now - WIP)
+* ~~*Security posture scoring*~~ (Pretty arbitrary for now - WIP)
 
 ### Email Analysis
 
