@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 
 """
-Email Security Audit Tool (PoC)
+Email-Audit
 
-Author: Charalampos Spanias
+Author: Charalampos Spanias (mollysec)
 
-Description:
-Performs a DNS-based email security assessment and produces:
+A lightweight email security assessment tool for analysing
+SPF, DKIM, DMARC, and MTA-STS configurations, validating
+authentication results from exported emails, and performing
+controlled spoofing assessments.
 
-Raw Record
-    ↓
-Breakdown
-    ↓
-Security Impact
-    ↓
-Assessment
+Article:
+Email Security Explained: SPF, DKIM, DMARC, and MTA-STS
+https://mollysec.com/posts/email-security-explained/
 """
 
 import argparse
