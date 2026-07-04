@@ -18,7 +18,11 @@ Assessment
 
 ## Features
 
-### DNS Analysis
+## Assessment Methodology
+
+The tool follows the same process typically used during an email security review:
+
+### 1. DNS analysis
 
 * SPF discovery and assessment
 * DMARC discovery and policy analysis
@@ -26,14 +30,14 @@ Assessment
 * MTA-STS detection and policy analysis
 * *Security posture scoring* (experimental - WIP)
 
-### Email Analysis
+### 2. Email analysis
 
 * Parse `.eml` files
 * Extract SPF, DKIM, and DMARC authentication results
 * Extract DKIM signing domain and selector
 * Validate whether SPF, DKIM, and DMARC are functioning in practice
 
-### Spoofing Validation
+### 3. Practical validation
 
 * Optional spoofing tests using `swaks`
 * Local SMTP relay support via Postfix
@@ -199,25 +203,6 @@ Security Impact:
 
 * swaks (spoofing tests)
 * postfix (local SMTP relay)
-
-## Assessment Methodology
-
-The tool follows the same process typically used during an email security review:
-
-1. DNS analysis
-   * SPF
-   * DKIM
-   * DMARC
-   * MTA-STS
-
-2. Email analysis
-   * Authentication-Results
-   * DKIM-Signature
-   * SPF outcomes
-   * DMARC outcomes
-
-3. Practical validation
-   * Controlled spoofing tests
 
 ## Limitations
 
