@@ -80,7 +80,7 @@ Example:
 ## Example Output
 
 ```bash
-./email-audit.py kairos-sec.com --eml /mnt/c/Users/User/Downloads/kairos-sec-com-test.eml --spoof testing@test.com
+./email-audit.py kairos-sec.com --eml kairos-sec-com-test.eml --spoof testing@test.com
 ```
 
 ```text
@@ -119,14 +119,15 @@ Assessment:
 === DKIM ===
 
 Raw Record:
-"v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqWolPujn/RZy0tmmVbe4jSrjWPjpgnlvRXzxwpk2iVot8AWw68y6YJARDHKESu9iFyjLzj58bEAm5mhCJAaBVvhYUjX2yhjf8m/vOjuFc0gbjPLwNGhEdbX1yVG08/ZqvKYQ4U2h0LxO7Nbl+Qs663pA8Pqx/fCvl9n+IAJo5ic7G2pfTH5YSUz0rROltlsl9cQ" "4TeC3WdcbzIXfTH+Sk6hM60ul2sahcRKihhncp7ooSmPpc5cgE19iTw06qsyZ/22s+3D5aWuvJ0IpyFygJjVM1pASaD5Ruhbtid3Ds0agw1+LYE66P0HUMHpbDlPdA0gVMDssfBUuzqjAObFWrQIDAQAB"
+"v=DKIM1;k=rsa;p=MII...QAB"
 
 Breakdown:
   - selector=default → DNS lookup location
   - Public key present in DNS
 
 Security Impact:
-  The domain supports DKIM signature validation. Actual implementation still requires inspection of a received email.
+  The domain supports DKIM signature validation.
+  Actual implementation still requires inspection of a received email.
 
 Assessment:
   PRESENT
@@ -181,7 +182,8 @@ MESSAGE SUBMITTED
 
 Security Impact:
   The spoofed email was accepted by the local SMTP relay and submitted for delivery. 
-  Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were successfully enforced.
+  Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections 
+  were successfully enforced.
 ```
 
 ## Requirements
