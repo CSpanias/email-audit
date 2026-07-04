@@ -44,43 +44,43 @@ Assessment
 ### DNS Review
 
 ```bash
-python3 email-audit.py <domain>
+./email-audit.py <domain>
 ```
 
 Example:
 
 ```bash
-python3 email-audit.py google.com
+./email-audit.py google.com
 ```
 
 ### Email Header Analysis
 
 ```bash
-python3 email-audit.py <domain> --eml <email_file>
+./email-audit.py <domain> --eml <email_file>
 ```
 
 Example:
 
 ```bash
-python3 email-audit.py hackthebox.com --eml htb-email.eml
+./email-audit.py hackthebox.com --eml htb-email.eml
 ```
 
 ### Spoofing Test
 
 ```bash
-python3 email-audit.py <domain> --spoof <recipient>
+./email-audit.py <domain> --spoof <recipient>
 ```
 
 Example:
 
 ```bash
-python3 email-audit.py example.com --spoof lab@example.net
+./email-audit.py example.com --spoof lab@example.net
 ```
 
 ## Example Output
 
 ```bash
-python3 email-audit.py kairos-sec.com --eml /mnt/c/Users/User/Downloads/kairos-sec-com-test.eml --spoof testing@test.com
+./email-audit.py kairos-sec.com --eml /mnt/c/Users/User/Downloads/kairos-sec-com-test.eml --spoof testing@test.com
 ```
 
 ```text
@@ -100,8 +100,9 @@ Security Impact:
 
 Assessment:
   ACCEPTABLE
+```
 
-
+```text
 === DMARC ===
 
 Breakdown:
@@ -112,8 +113,9 @@ Security Impact:
 
 Assessment:
   MISSING
+```
 
-
+```text
 === DKIM ===
 
 Raw Record:
@@ -128,8 +130,9 @@ Security Impact:
 
 Assessment:
   PRESENT
+```
 
-
+```text
 === MTA-STS ===
 
 Breakdown:
@@ -151,8 +154,9 @@ DKIM        PRESENT
 MTA-STS     MISSING
 
 Overall Security Posture: WEAK (3/10)
+```
 
-
+```text
 === OBSERVED AUTHENTICATION RESULTS ===
 
 SPF:   UNKNOWN
@@ -162,7 +166,9 @@ DMARC: UNKNOWN
 DKIM Details:
 Signing Domain: kairos-sec-com.20230601.gappssmtp.com
 Selector: 20230601
+```
 
+```text
 === SPOOFING TEST ===
 
 Test Details:
@@ -174,7 +180,8 @@ Assessment:
 MESSAGE SUBMITTED
 
 Security Impact:
-  The spoofed email was accepted by the local SMTP relay and submitted for delivery. Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were successfully enforced.
+  The spoofed email was accepted by the local SMTP relay and submitted for delivery. 
+  Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were successfully enforced.
 ```
 
 ## Requirements
