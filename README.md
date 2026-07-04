@@ -1,6 +1,6 @@
 # Email-Audit
 
-A Python-based tool designed to make email configuation reviews more efficient.
+A Python-based tool designed to make email security reviews more efficient.
 
 Developed as an educational tool to accompany [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/email-security-explained/). 
 
@@ -23,20 +23,21 @@ Assessment
 * SPF discovery and assessment
 * DMARC discovery and policy analysis
 * DKIM detection using common selectors
-* MTA-STS detection
-* ~~*Security posture scoring*~~ (Pretty arbitrary for now - WIP)
+* MTA-STS detection and policy analysis
+* *Security posture scoring* (experimental - WIP)
 
 ### Email Analysis
 
 * Parse `.eml` files
 * Extract SPF, DKIM, and DMARC authentication results
 * Extract DKIM signing domain and selector
-* Validate whether DNS controls are actually being used in practice
+* Validate whether SPF, DKIM, and DMARC are functioning in practice
 
-### ~~*Spoofing Validation*~~ (Currently not implemented - WIP)
+### Spoofing Validation
 
 * Optional spoofing tests using `swaks`
 * Local SMTP relay support via Postfix
+* Submission outcome reporting
 
 ## Usage
 
@@ -64,47 +65,116 @@ Example:
 python3 email-audit.py hackthebox.com --eml htb-email.eml
 ```
 
-### ~~*Spoofing Test*~~ (Currently not implemented - WIP)
+### Spoofing Test
 
 ```bash
-python3 email-audit.py <domain> --spoof --to <recipient>
+python3 email-audit.py <domain> --spoof <recipient>
 ```
 
 Example:
 
 ```bash
-python3 email-audit.py example.com --spoof --to lab@example.net
+python3 email-audit.py example.com --spoof lab@example.net
 ```
 
 ## Example Output
 
-```text
-=== SPF ===
-
-Raw Record:
-v=spf1 include:_spf.google.com ~all
-
-Breakdown:
-    - include:_spf.google.com → Authorised third-party provider
-    - ~all → SPF enforcement policy
-
-Security Impact:
-    Unauthorised senders may still be accepted by some recipients.
-
-Assessment:
-    ACCEPTABLE
+```bash
+python3 email-audit.py kairos-sec.com --eml /mnt/c/Users/User/Downloads/kairos-sec-com-test.eml --spoof testing@test.com
 ```
 
 ```text
+KAIROS-SEC.COM
+
+=== SPF ===
+
+Raw Record:
+v=spf1 a mx include:_spf.mlsend.com ~all
+
+Breakdown:
+  - include:_spf.mlsend.com → Authorised third-party provider
+  - ~all → SPF enforcement policy
+
+Security Impact:
+  Unauthorised senders may still be accepted by some recipients.
+
+Assessment:
+  ACCEPTABLE
+
+
+=== DMARC ===
+
+Breakdown:
+  - No DMARC record present
+
+Security Impact:
+  Receiving servers are not given any policy for handling authentication failures.
+
+Assessment:
+  MISSING
+
+
+=== DKIM ===
+
+Raw Record:
+"v=DKIM1;k=rsa;p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqWolPujn/RZy0tmmVbe4jSrjWPjpgnlvRXzxwpk2iVot8AWw68y6YJARDHKESu9iFyjLzj58bEAm5mhCJAaBVvhYUjX2yhjf8m/vOjuFc0gbjPLwNGhEdbX1yVG08/ZqvKYQ4U2h0LxO7Nbl+Qs663pA8Pqx/fCvl9n+IAJo5ic7G2pfTH5YSUz0rROltlsl9cQ" "4TeC3WdcbzIXfTH+Sk6hM60ul2sahcRKihhncp7ooSmPpc5cgE19iTw06qsyZ/22s+3D5aWuvJ0IpyFygJjVM1pASaD5Ruhbtid3Ds0agw1+LYE66P0HUMHpbDlPdA0gVMDssfBUuzqjAObFWrQIDAQAB"
+
+Breakdown:
+  - selector=default → DNS lookup location
+  - Public key present in DNS
+
+Security Impact:
+  The domain supports DKIM signature validation. Actual implementation still requires inspection of a received email.
+
+Assessment:
+  PRESENT
+
+
+=== MTA-STS ===
+
+Breakdown:
+  - No MTA-STS record present
+
+Security Impact:
+  SMTP delivery may rely solely on opportunistic TLS.
+
+Assessment:
+  MISSING
+```
+
+```text
+=== EMAIL SECURITY SUMMARY ===
+
+SPF         ACCEPTABLE
+DMARC       MISSING
+DKIM        PRESENT
+MTA-STS     MISSING
+
+Overall Security Posture: WEAK (3/10)
+
+
 === OBSERVED AUTHENTICATION RESULTS ===
 
-SPF:   PASS
+SPF:   UNKNOWN
 DKIM:  PASS
-DMARC: PASS
+DMARC: UNKNOWN
 
 DKIM Details:
-    Signing Domain: hackthebox.com
-    Selector: google
+Signing Domain: kairos-sec-com.20230601.gappssmtp.com
+Selector: 20230601
+
+=== SPOOFING TEST ===
+
+Test Details:
+Sender:     ceo@kairos-sec.com
+Recipient:  testing@test.com
+Subject:    Subject: Controlled Spoofing Assessment
+
+Assessment:
+MESSAGE SUBMITTED
+
+Security Impact:
+  The spoofed email was accepted by the local SMTP relay and submitted for delivery. Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were successfully enforced.
 ```
 
 ## Requirements
@@ -114,7 +184,7 @@ DKIM Details:
 * Python 3
 * dig
 
-### ~~*Optional*~~ (Currently not implemented - WIP)
+### Optional
 
 * swaks (spoofing tests)
 * postfix (local SMTP relay)
@@ -135,7 +205,7 @@ The tool follows the same process typically used during an email security review
    * SPF outcomes
    * DMARC outcomes
 
-3. ~~*Practical validation*~~ (Currently not implemented - WIP)
+3. Practical validation
    * Controlled spoofing tests
 
 ## Limitations
@@ -143,12 +213,11 @@ The tool follows the same process typically used during an email security review
 * DKIM detection is currently based on common selector enumeration.
 * DNS-based DKIM detection confirms support for DKIM but does not confirm implementation.
 * Full validation requires inspection of a real email (`.eml`) file.
-* Spoofing tests must only be performed against authorised targets.
+* Spoofing tests (performed against authorised targets!) confirm message submission only; manual validation is required.
 
 ## Roadmap
 
 * Improved DKIM selector discovery
-* MTA-STS policy retrieval and validation
 * Enhanced scoring based on observed authentication results
 * Microsoft Outlook (`.msg`) support
 * TLS-RPT analysis
