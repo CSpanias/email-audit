@@ -63,6 +63,7 @@ The tool follows the same assessment methodology typically used during an email 
 
 ```bash
 sudo service postfix start
+
 ./email-audit.py <domain> --spoof <recipient>
 
 ./email-audit.py kairos-sec.com --spoof mollysec@lab.com
