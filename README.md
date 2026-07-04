@@ -48,7 +48,6 @@ The tool follows the same assessment methodology typically used during an email 
 ```bash
 ./email-audit.py <domain>
 
-# Example
 ./email-audit.py kairos-sec.com
 ```
 
@@ -57,7 +56,6 @@ The tool follows the same assessment methodology typically used during an email 
 ```bash
 ./email-audit.py <domain> --eml <email_file>
 
-# Example
 ./email-audit.py kairos-sec.com --eml kairos-sec-email.eml
 ```
 
@@ -67,7 +65,6 @@ The tool follows the same assessment methodology typically used during an email 
 sudo service postfix start
 ./email-audit.py <domain> --spoof <recipient>
 
-# Example
 ./email-audit.py kairos-sec.com --spoof mollysec@lab.com
 ```
 
