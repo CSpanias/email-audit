@@ -68,12 +68,14 @@ Example:
 ### Spoofing Test
 
 ```bash
+sudo service postfix start
 ./email-audit.py <domain> --spoof <recipient>
 ```
 
 Example:
 
 ```bash
+sudo service postfix start
 ./email-audit.py example.com --spoof lab@example.net
 ```
 
@@ -182,8 +184,8 @@ MESSAGE SUBMITTED
 
 Security Impact:
   The spoofed email was accepted by the local SMTP relay and submitted for delivery. 
-  Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections 
-  were successfully enforced.
+  Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were
+  successfully enforced.
 ```
 
 ## Requirements
