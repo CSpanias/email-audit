@@ -47,24 +47,18 @@ The tool follows the same assessment methodology typically used during an email 
 
 ```bash
 ./email-audit.py <domain>
-```
 
-Example:
-
-```bash
-./email-audit.py google.com
+# Example
+./email-audit.py kairos-sec.com
 ```
 
 ### Email Header Analysis
 
 ```bash
 ./email-audit.py <domain> --eml <email_file>
-```
 
-Example:
-
-```bash
-./email-audit.py hackthebox.com --eml htb-email.eml
+# Example
+./email-audit.py kairos-sec.com --eml kairos-sec-email.eml
 ```
 
 ### Spoofing Test
@@ -72,19 +66,15 @@ Example:
 ```bash
 sudo service postfix start
 ./email-audit.py <domain> --spoof <recipient>
-```
 
-Example:
-
-```bash
-sudo service postfix start
-./email-audit.py example.com --spoof lab@example.net
+# Example
+./email-audit.py kairos-sec.com --spoof mollysec@lab.com
 ```
 
 ## Example Output
 
 ```bash
-./email-audit.py kairos-sec.com --eml kairos-sec-com-test.eml --spoof testing@test.com
+./email-audit.py kairos-sec.com --eml kairos-sec-email.eml --spoof mollysec@lab.com
 ```
 
 ```text
@@ -178,7 +168,7 @@ Selector: 20230601
 
 Test Details:
 Sender:     ceo@kairos-sec.com
-Recipient:  testing@test.com
+Recipient:  mollysec@lab.com
 Subject:    Subject: Controlled Spoofing Assessment
 
 Assessment:
