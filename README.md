@@ -18,9 +18,7 @@ Assessment
 
 ## Features
 
-## Assessment Methodology
-
-The tool follows the same process typically used during an email security review:
+The tool follows the same assessment methodology typically used during an email security review:
 
 ### 1. DNS analysis
 
