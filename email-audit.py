@@ -793,14 +793,10 @@ def main():
         assess_dkim(dkim_selector, dkim_record, dkim_found),
         assess_mta_sts(mta_record, mta_policy),
     ]
-
-    for result in results:
-        print_assessment(result)
-
-    print_summary(results)
+    
+    auth_results = None
     
     if args.eml:
-        
         auth_results = parse_eml_file(args.eml)
         
         if auth_results["dkim_selector"]:
@@ -808,7 +804,15 @@ def main():
             results[2] = assess_dkim(dkim_selector, dkim_record, dkim_found)
             
         report_eml(auth_results)
-        
+
+    for result in results:
+        print_assessment(result)
+
+    print_summary(results)
+    
+    if auth_results:
+        report_eml(auth_results)
+    
     if args.spoof:
         
         spoof_result = perform_spoof_test(args.domain, args.spoof)
