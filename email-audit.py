@@ -151,6 +151,8 @@ def check_mta_sts(domain):
 
 
 def check_dkim_dns(domain):
+
+    # Common selectors
     selectors = [
         "default",
         "selector1",
@@ -159,6 +161,7 @@ def check_dkim_dns(domain):
     ]
 
     for selector in selectors:
+
         output = run_command([
             "dig",
             "+short",
@@ -166,10 +169,29 @@ def check_dkim_dns(domain):
             "TXT"
         ])
 
-        if output:
-            return selector, output
+        if not output:
+            continue
 
-    return "", ""
+        # Valid DKIM record
+        if "v=DKIM1" in output:
+            return selector, output, True
+
+        # If output returned, but not DKIM record -> possible CNAME target
+        target = output.strip().rstrip(".")
+
+        dkim_record = run_command([
+            "dig",
+            "+short",
+            target,
+            "TXT"
+        ])
+
+        if "v=DKIM1" in dkim_record:
+            return selector, dkim_record, True
+
+        return selector, output, False
+
+    return "", "", False
 
 
 # ------------------------------------------------------------
@@ -336,7 +358,7 @@ def assess_dmarc(record):
 # DKIM Assessment
 # ------------------------------------------------------------
 
-def assess_dkim(selector, record):
+def assess_dkim(selector, record, dkim_found):
 
     result = {
         "control": "DKIM",
@@ -353,15 +375,23 @@ def assess_dkim(selector, record):
         result["breakdown"].append("No common selector detected")
         result["impact"] = ("DKIM support could not be confirmed through DNS.")
         result["assessment"] = "UNKNOWN"
-        result["score"] = 0
 
         return result
 
     result["breakdown"].append(f"selector={selector} → DNS lookup location")
-    result["breakdown"].append("Public key present in DNS")
-    result["impact"] = ("The domain supports DKIM signature validation. Actual implementation still requires inspection of a received email.")
-    result["assessment"] = "PRESENT"
-    result["score"] = 1
+
+    if dkim_found:
+
+        result["breakdown"].append("Public key present in DNS")
+        result["impact"] = ("The domain supports DKIM signature validation. Actual implementation still requires inspection of a received email.")
+        result["assessment"] = "PRESENT"
+        result["score"] = 1
+
+    else:
+
+        result["breakdown"].append("Selector detected but no DKIM public key was confirmed")
+        result["impact"] = ("A common DKIM selector was identified, however a corresponding DKIM public key could not be verified automatically.")
+        result["assessment"] = "UNKNOWN"
 
     return result
 
@@ -757,7 +787,7 @@ def main():
     print_domain_header(args.domain)
     spf_record = get_spf_record(args.domain)
     dmarc_record = get_dmarc_record(args.domain)
-    dkim_selector, dkim_record = (check_dkim_dns(args.domain))
+    dkim_selector, dkim_record, dkim_found = check_dkim_dns(args.domain)
     mta_record = check_mta_sts(args.domain)
     mta_policy_raw = get_mta_sts_policy(args.domain)
     mta_policy = parse_mta_sts_policy(mta_policy_raw)
@@ -765,7 +795,7 @@ def main():
     results = [
         assess_spf(spf_record),
         assess_dmarc(dmarc_record),
-        assess_dkim(dkim_selector, dkim_record),
+        assess_dkim(dkim_selector, dkim_record, dkim_found),
         assess_mta_sts(mta_record, mta_policy),
     ]
 
