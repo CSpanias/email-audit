@@ -802,11 +802,11 @@ def main():
         if auth_results["dkim_selector"]:
             dkim_selector, dkim_record, dkim_found = (check_dkim_dns(args.domain, auth_results["dkim_selector"]))
             results[2] = assess_dkim(dkim_selector, dkim_record, dkim_found)
-            
-        report_eml(auth_results)
 
     for result in results:
         print_assessment(result)
+    
+    print_summary(results)
     
     if auth_results:
         report_eml(auth_results)
