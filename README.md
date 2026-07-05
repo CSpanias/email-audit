@@ -16,6 +16,39 @@ Security Impact
 Assessment
 ````
 
+## Installation
+
+Recommended ([uv](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer))
+
+```bash
+# Install UV
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install email-audit via UV
+uv tool install git+https://github.com/CSpanias/email-audit
+
+# Verify installation
+email-audit -h
+```
+
+Clone locally:
+
+> **Note**: Python3 must be installed and available in your `PATH`.
+
+```bash
+# Clone the repository
+git clone https://github.com/CSpanias/email-audit /opt/email-audit
+
+# Make the script executable
+chmod +x /opt/email-audit/email_audit.py
+
+# Create a symbolic link
+sudo ln -s /opt/email-audit/email_audit.py /usr/local/bin/email-audit
+
+# Verify installation
+email-audit -h
+```
+
 ## Features
 
 The tool follows the same assessment methodology typically used during an email security review:
