@@ -18,7 +18,7 @@ Assessment
 
 ## Installation
 
-Recommended ([uv](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer))
+Recommended ([uv](https://docs.astral.sh/uv/getting-started/installation/#standalone-installer)):
 
 ```bash
 # Install UV

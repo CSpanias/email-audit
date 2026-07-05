@@ -606,7 +606,7 @@ def perform_spoof_test(domain, recipient):
     if "queued as" in output:
 
         result["assessment"] = ("MESSAGE SUBMITTED")
-        result["impact"] = ("The spoofed email was accepted by the local SMTP relay and submitted for delivery. "
+        result["impact"] = ("The spoofed email was accepted by the local SMTP relay and submitted for delivery.\n"
             "Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were successfully enforced.")
 
     elif "reject" in output:
@@ -639,7 +639,7 @@ def report_spoof(result):
     print()
 
     print("Security Impact:")
-    print(f"  {result['impact']}")
+    print(f"{result['impact']}")
 
     print()
 
