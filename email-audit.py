@@ -807,8 +807,6 @@ def main():
 
     for result in results:
         print_assessment(result)
-
-    print_summary(results)
     
     if auth_results:
         report_eml(auth_results)
