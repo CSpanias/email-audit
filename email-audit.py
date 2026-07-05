@@ -150,15 +150,10 @@ def check_mta_sts(domain):
     return output.strip()
 
 
-def check_dkim_dns(domain):
+def check_dkim_dns(domain, selector=None):
 
     # Common selectors
-    selectors = [
-        "default",
-        "selector1",
-        "selector2",
-        "google"
-    ]
+    selectors = ([selector] if selector else COMMON_DKIM_SELECTORS)
 
     for selector in selectors:
 
@@ -178,13 +173,7 @@ def check_dkim_dns(domain):
 
         # If output returned, but not DKIM record -> possible CNAME target
         target = output.strip().rstrip(".")
-
-        dkim_record = run_command([
-            "dig",
-            "+short",
-            target,
-            "TXT"
-        ])
+        dkim_record = run_command(["dig", "+short", target, "TXT"])
 
         if "v=DKIM1" in dkim_record:
             return selector, dkim_record, True
@@ -358,6 +347,8 @@ def assess_dmarc(record):
 # DKIM Assessment
 # ------------------------------------------------------------
 
+COMMON_DKIM_SELECTORS = ["default", "selector1", "selector2", "google"]
+
 def assess_dkim(selector, record, dkim_found):
 
     result = {
@@ -377,9 +368,12 @@ def assess_dkim(selector, record, dkim_found):
         result["assessment"] = "UNKNOWN"
 
         return result
-
-    result["breakdown"].append(f"selector={selector} → DNS lookup location")
-
+    
+    if selector in COMMON_DKIM_SELECTORS:
+        result["breakdown"].append(f"Common selector discovered: {selector}")
+    else:
+        result["breakdown"].append(f"Selector extracted from supplied email: {selector}")
+        
     if dkim_found:
 
         result["breakdown"].append("Public key present in DNS")
@@ -389,8 +383,9 @@ def assess_dkim(selector, record, dkim_found):
 
     else:
 
-        result["breakdown"].append("Selector detected but no DKIM public key was confirmed")
-        result["impact"] = ("A common DKIM selector was identified, however a corresponding DKIM public key could not be verified automatically.")
+        result["breakdown"].append("Selector delegation identified")
+        result["breakdown"].append("No DKIM public key could be confirmed")
+        result["impact"] = ("A DKIM selector was identified, however a corresponding DKIM public key could not be verified automatically.")
         result["assessment"] = "UNKNOWN"
 
     return result
@@ -806,8 +801,13 @@ def main():
     
     if args.eml:
         
-        eml_results = parse_eml_file(args.eml)
-        report_eml(eml_results)
+        auth_results = parse_eml_file(args.eml)
+        
+        if auth_results["dkim_selector"]:
+            dkim_selector, dkim_record, dkim_found = (check_dkim_dns(args.domain, auth_results["dkim_selector"]))
+            results[2] = assess_dkim(dkim_selector, dkim_record, dkim_found)
+            
+        report_eml(auth_results)
         
     if args.spoof:
         
