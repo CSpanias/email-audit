@@ -7,13 +7,7 @@ Developed as an educational tool to accompany [Email Security Explained: SPF, DK
 It analyses common email security mechanisms and provides a structured assessment consisting of:
 
 ```text
-Raw Record
-    ↓
-Breakdown
-    ↓
-Security Impact
-    ↓
-Assessment
+Raw Record → Breakdown → Security Impact → Assessment
 ```
 
 ## Installation
@@ -223,8 +217,7 @@ Security Impact:
 
 ### Optional
 
-* [msgconvert](https://github.com/mvz/email-outlook-message-perl) (`.msg` support)
-  * `sudo apt install libemail-outlook-message-perl` 
+* [msgconvert](https://github.com/mvz/email-outlook-message-perl) (`.msg` support) → `sudo apt install libemail-outlook-message-perl` 
 * [swaks](https://www.kali.org/tools/swaks/) (spoofing tests)
 * postfix (local SMTP relay)
 
