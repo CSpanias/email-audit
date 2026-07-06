@@ -232,3 +232,4 @@ Security Impact:
 * Enhanced scoring based on observed authentication results
 * TLS-RPT analysis
 * Exportable assessment reports in `.xml` format
+* Accept multiple domains and files simultaneously
