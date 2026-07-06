@@ -14,7 +14,7 @@ Breakdown
 Security Impact
     ↓
 Assessment
-````
+```
 
 ## Installation
 
@@ -29,11 +29,14 @@ uv tool install git+https://github.com/CSpanias/email-audit
 
 # Verify installation
 email-audit -h
+
+# Update
+uv tool upgrade email-audit
 ```
 
 Clone locally:
 
-> **Note**: Python3 must be installed and available in your `PATH`.
+> **Note**: Python 3 must be installed and available in your `PATH`.
 
 ```bash
 # Clone the repository
@@ -59,11 +62,12 @@ The tool follows the same assessment methodology typically used during an email 
 * DMARC discovery and policy analysis
 * DKIM detection using common selectors
 * MTA-STS detection and policy analysis
-* *Security posture scoring* (experimental - WIP)
+* *Security posture scoring* (experimental)
 
 ### 2. Email analysis
 
-* Parse `.eml` files
+* Parse `.eml` and `.msg` files
+* Automatically convert `.msg` files using `msgconvert`
 * Extract SPF, DKIM, and DMARC authentication results
 * Extract DKIM signing domain and selector
 * Validate whether SPF, DKIM, and DMARC are functioning in practice
@@ -79,17 +83,17 @@ The tool follows the same assessment methodology typically used during an email 
 ### DNS Review
 
 ```bash
-./email-audit.py <domain>
+email-audit <domain>
 
-./email-audit.py kairos-sec.com
+email-audit kairos-sec.com
 ```
 
 ### Email Header Analysis
 
 ```bash
-./email-audit.py <domain> --eml <email_file>
+email-audit <domain> --email <email_file>
 
-./email-audit.py kairos-sec.com --eml kairos-sec-email.eml
+email-audit kairos-sec.com --email kairos-sec-email.eml
 ```
 
 ### Spoofing Test
@@ -97,15 +101,15 @@ The tool follows the same assessment methodology typically used during an email 
 ```bash
 sudo service postfix start
 
-./email-audit.py <domain> --spoof <recipient>
+email-audit <domain> --spoof <recipient>
 
-./email-audit.py kairos-sec.com --spoof mollysec@lab.com
+email-audit kairos-sec.com --spoof mollysec@lab.com
 ```
 
 ## Example Output
 
 ```bash
-./email-audit.py kairos-sec.com --eml kairos-sec-email.eml --spoof mollysec@lab.com
+email-audit kairos-sec.com --email kairos-sec-email.eml --spoof mollysec@lab.com
 ```
 
 ```text
@@ -147,12 +151,11 @@ Raw Record:
 "v=DKIM1;k=rsa;p=MII...QAB"
 
 Breakdown:
-  - selector=default → DNS lookup location
+  - Common selector discovered: default
   - Public key present in DNS
 
 Security Impact:
-  The domain supports DKIM signature validation.
-  Actual implementation still requires inspection of a received email.
+  The domain supports DKIM signature validation. Actual implementation still requires inspection of a received email.
 
 Assessment:
   PRESENT
@@ -220,20 +223,19 @@ Security Impact:
 
 ### Optional
 
-* swaks (spoofing tests)
+* [msgconvert](https://github.com/mvz/email-outlook-message-perl) (`.msg` support)
+  * `sudo apt install libemail-outlook-message-perl` 
+* [swaks](https://www.kali.org/tools/swaks/) (spoofing tests)
 * postfix (local SMTP relay)
 
 ## Limitations
 
-* DKIM detection is currently based on common selector enumeration.
 * DNS-based DKIM detection confirms support for DKIM but does not confirm implementation.
-* Full validation requires inspection of a real email (`.eml`) file.
+* Full validation requires inspection of a real email (`.eml` or `.msg`) file.
 * Spoofing tests (performed against authorised targets!) confirm message submission only; manual validation is required.
 
 ## Roadmap
 
-* Improved DKIM selector discovery
 * Enhanced scoring based on observed authentication results
-* Microsoft Outlook (`.msg`) support
 * TLS-RPT analysis
 * Exportable assessment reports in `.xml` format

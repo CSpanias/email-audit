@@ -20,8 +20,11 @@ import subprocess
 import re
 import socket
 import urllib.request
+import tempfile
+import os
 from email import policy
 from email.parser import BytesParser
+from shutil import which
 
 # ------------------------------------------------------------
 # Formatting
@@ -117,6 +120,24 @@ def print_assessment(result):
     print("Assessment:")
     print(f"  {colour_assessment(result['assessment'])}")
     print()
+
+# ------------------------------------------------------------
+# Convert MSG to EML
+# ------------------------------------------------------------
+
+def convert_msg_to_eml(msg_file):
+
+    if not which("msgconvert"):
+        raise RuntimeError("msgconvert is not installed. Install libemail-outlook-message-perl.")
+
+    with tempfile.NamedTemporaryFile(suffix=".eml", delete=False) as temp_file:
+        eml_path = temp_file.name
+
+    result = subprocess.run(["msgconvert", "--outfile", eml_path, msg_file], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise RuntimeError("Failed to convert MSG file using msgconvert.")
+    return eml_path
 
 
 # ------------------------------------------------------------
@@ -776,7 +797,7 @@ def main():
 
     parser = argparse.ArgumentParser(description = "Email security assessment tool")
     parser.add_argument("domain", help = "Target domain")
-    parser.add_argument("--eml", help = "Path to EML file")
+    parser.add_argument("-E", "--email", help = "Path to EML or MSG file")
     parser.add_argument("--spoof", metavar = "EMAIL", help = "Recipient address for spoofing test")
     args = parser.parse_args()
     print_domain_header(args.domain)
@@ -796,12 +817,28 @@ def main():
     
     auth_results = None
     
-    if args.eml:
-        auth_results = parse_eml_file(args.eml)
+    if args.email:
+
+        email_file = args.email
+        temp_eml = None
+
+        try:
+            if email_file.lower().endswith(".msg"):
+                temp_eml = convert_msg_to_eml(email_file)
+                email_file = temp_eml
+
+            auth_results = parse_eml_file(email_file)
         
-        if auth_results["dkim_selector"]:
-            dkim_selector, dkim_record, dkim_found = (check_dkim_dns(args.domain, auth_results["dkim_selector"]))
-            results[2] = assess_dkim(dkim_selector, dkim_record, dkim_found)
+            if auth_results["dkim_selector"]:
+                dkim_selector, dkim_record, dkim_found = (check_dkim_dns(args.domain, auth_results["dkim_selector"]))
+                results[2] = assess_dkim(dkim_selector, dkim_record, dkim_found)
+
+            report_eml(auth_results)
+
+        finally:
+            if temp_eml and os.path.exists(temp_eml):
+                os.remove(temp_eml)
+
 
     for result in results:
         print_assessment(result)
