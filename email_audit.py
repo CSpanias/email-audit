@@ -1381,7 +1381,7 @@ def export_markdown(domain, commentary, solution, results, auth_results=None):
 #-------------------------------------------------------------------------------
 def report_authentication_validation(auth_results):
 
-    table = Table(title="Authentication Validation", expand=True)
+    table = Table(title="Authentication Validation")
 
     table.add_column("Control", style="cyan")
     table.add_column("Result")
@@ -1412,7 +1412,7 @@ def report_configuration_validation(results):
     dmarc = results[2]
     mta = results[3]
 
-    table = Table(title="Configuration Validation", expand=True)
+    table = Table(title="Configuration Validation")
 
     table.add_column("Control", style="cyan")
     table.add_column("Configuration")
