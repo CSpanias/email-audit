@@ -69,6 +69,12 @@ The tool follows the same assessment methodology typically used during an email 
 * Optional spoofing tests using `swaks`
 * Local SMTP relay support via Postfix
 
+### 4. Reporting
+
+* Markdown report generation
+* JSON findings export
+* Rich console evidence tables
+
 ## Usage
 
 ```bash
@@ -158,25 +164,8 @@ Security Impact:
 
 Assessment:
   MISSING
-```
-
-```text
-=== EMAIL SECURITY SUMMARY ===
-
-SPF         SECURE
-DKIM        PRESENT
-DMARC       ACCEPTABLE
-MTA-STS     MISSING
 
 Overall Security Posture: MODERATE (6/10)
-```
-
-```text
-=== OBSERVED AUTHENTICATION RESULTS ===
-
-SPF:   PASS
-DKIM:  PASS
-DMARC: PASS
 ```
 
 ```text
@@ -197,10 +186,33 @@ Security Impact:
 ```
 
 ```text
-[+] Assessment complete
-[+] Findings Exported : 2
-[+] XML Output        : <domain>.xml
-[+] Markdown Output   : <domain>.md
+=== SCREENSHOT EVIDENCE ===
+
+         Configuration Evidence
+┏━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┓
+┃ Control ┃ Configuration    ┃ Status  ┃
+┡━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━┩
+│ SPF     │ Hard Fail (-all) │ SECURE  │
+│ DKIM    │ selector1        │ PRESENT │
+│ DMARC   │ Reject           │ SECURE  │
+│ MTA-STS │ Enforce          │ SECURE  │
+└─────────┴──────────────────┴─────────┘
+
+   Authentication
+      Evidence
+┏━━━━━━━━━┳━━━━━━━━┓
+┃ Control ┃ Result ┃
+┡━━━━━━━━━╇━━━━━━━━┩
+│ SPF     │ PASS   │
+│ DKIM    │ PASS   │
+│ DMARC   │ PASS   │
+└─────────┴────────┘
+
+[+] Assessment Complete
+
+    Findings Exported : 1
+    JSON Output       : <domain>.json
+    Markdown Output   : <domain>.md
 ```
 
 The Markdown file will include the Executive Summary, Technical Commentary, and Solution sections.
@@ -240,9 +252,9 @@ Sender Policy Framework (SPF) is an email authentication mechanism that enables 
 The domain utilised a restrictive SPF configuration with a hard-fail enforcement policy, helping receiving mail systems identify authorised sending infrastructure and reject unauthorised sources.
 
 The following authorised sending services were identified:
-- include:theaccessgroupspf.smtp.com
-- include:mail.zendesk.com
-- include:spf.protection.outlook.com
+- theaccessgroupspf.smtp.com
+- mail.zendesk.com
+- spf.protection.outlook.com
 
 This configuration helps reduce the risk of email spoofing and improves confidence in the authenticity of messages originating from the domain.
 
@@ -265,7 +277,7 @@ The DMARC configuration was observed to:
 
 DMARC aggregate reports were configured to be sent to:
 
-- mailto:dmarc@<domain>
+- dmarc@<domain>
 
 Whilst less restrictive than a reject policy, this configuration still provides meaningful protection against spoofing and may help reduce the likelihood of fraudulent messages reaching end users.
 
