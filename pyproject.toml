@@ -21,3 +21,6 @@ keywords = [
     "dmarc",
     "mta-sts"
 ]
+
+[project.scripts]
+email-audit = "email_audit:main"
