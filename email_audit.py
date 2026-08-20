@@ -22,9 +22,14 @@ import socket
 import urllib.request
 import tempfile
 import os
+
+from rich.console import Console
+from rich.table import Table
+from shutil import which
+
 from email import policy
 from email.parser import BytesParser
-from shutil import which
+
 
 # ------------------------------------------------------------
 # Constants
@@ -104,6 +109,9 @@ DMARC_MAP = {
     "none": "Monitoring"
 }
 
+# Initialise Rich Table
+console = Console()
+
 
 # ------------------------------------------------------------
 # Formatting
@@ -147,6 +155,17 @@ def colour_auth_result(value):
         return (f"{COLOR_RED}{value_upper}{COLOR_RESET}")
 
     return (f"{COLOR_YELLOW}{value_upper}{COLOR_RESET}")
+
+
+def rich_assessment_colour(status):
+
+    if status in ["SECURE", "PRESENT"]:
+        return f"[green]{status}[/green]"
+
+    elif status == "ACCEPTABLE":
+        return f"[yellow]{status}[/yellow]"
+
+    return f"[red]{status}[/red]"
 
 # ------------------------------------------------------------
 # Utilities
@@ -1123,9 +1142,9 @@ def build_commentary(domain, results, auth_results=None):
                 "meaningful protection against domain spoofing or email impersonation attacks.")
             text.append("")
 
-    #----------------------------
+    #---------------------------------------------------------------------------
     # MTA-STS
-    #----------------------------
+    #---------------------------------------------------------------------------
 
     text.append("### Mail Transfer Agent Strict Transport Security (MTA-STS)")
     text.append("")
@@ -1204,9 +1223,9 @@ def build_commentary(domain, results, auth_results=None):
     return "\n".join(text)
 
 
-# ------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Final Summary Table
-# ------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
 def print_summary(results):
 
@@ -1238,9 +1257,9 @@ def print_summary(results):
     print()
 
 
-# ------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Recommendations
-# ------------------------------------------------------------
+#-------------------------------------------------------------------------------
 
 def build_recommendations(domain, results):
 
@@ -1302,10 +1321,9 @@ def build_recommendations(domain, results):
 
     return text
 
-# ------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # References
-# ------------------------------------------------------------
-
+#-------------------------------------------------------------------------------
 def build_references(results):
 
     refs = {"cccs", "ncsc"}
@@ -1337,10 +1355,9 @@ def build_references(results):
     return text
 
 
-# ------------------------------------------------------------
+#-------------------------------------------------------------------------------
 # Markdown Export
-# ------------------------------------------------------------
-
+#-------------------------------------------------------------------------------
 def export_markdown(domain, commentary, solution, results, auth_results=None):
 
     filename = f"{domain}.md"
@@ -1359,6 +1376,90 @@ def export_markdown(domain, commentary, solution, results, auth_results=None):
 
     return filename
 
+#-------------------------------------------------------------------------------
+# Screenshot Evidence
+#-------------------------------------------------------------------------------
+def report_authentication_validation(auth_results):
+
+    table = Table(title="Authentication Validation", expand=True)
+
+    table.add_column("Control", style="cyan")
+    table.add_column("Result")
+
+    def colour_result(value):
+
+        value = value.upper()
+
+        if value == "PASS":
+            return f"[green]{value}[/green]"
+
+        if value == "FAIL":
+            return f"[red]{value}[/red]"
+
+        return f"[yellow]{value}[/yellow]"
+
+    table.add_row("SPF", colour_result(auth_results["spf"]))
+    table.add_row("DKIM", colour_result(auth_results["dkim"]))
+    table.add_row("DMARC", colour_result(auth_results["dmarc"]))
+
+    console.print(table)
+
+
+def report_configuration_validation(results):
+
+    spf = results[0]
+    dkim = results[1]
+    dmarc = results[2]
+    mta = results[3]
+
+    table = Table(title="Configuration Validation", expand=True)
+
+    table.add_column("Control", style="cyan")
+    table.add_column("Configuration")
+    table.add_column("Status")
+
+    # SPF
+    if "-all" in spf["raw"]:
+        spf_config = "Hard Fail (-all)"
+    elif "~all" in spf["raw"]:
+        spf_config = "Soft Fail (~all)"
+    elif "+all" in spf["raw"]:
+        spf_config = "Permissive (+all)"
+    else:
+        spf_config = "Not Present"
+
+    # DKIM
+    selector = "Unknown"
+
+    for item in dkim["breakdown"]:
+
+        if item.startswith("Common selector discovered:"):
+            selector = item.split(": ", 1)[1]
+            break
+
+        if item.startswith("Selector extracted from supplied email:"):
+            selector = item.split(": ", 1)[1]
+            break
+
+    # DMARC
+    policy = dmarc.get("tags", {}).get("p", "")
+    dmarc_config = DMARC_MAP.get(policy, "Not Present")
+
+    # MTA-STS
+    mode = mta.get("policy", {}).get("mode", "")
+    mta_config = MTA_MAP.get(mode, "Not Present")
+
+    table.add_row("SPF", spf_config, rich_assessment_colour(spf["assessment"]))
+    table.add_row("DKIM", selector, rich_assessment_colour(dkim["assessment"]))
+    table.add_row(
+        "DMARC", dmarc_config,rich_assessment_colour(dmarc["assessment"])
+    )
+
+    table.add_row(
+        "MTA-STS", mta_config, rich_assessment_colour(mta["assessment"])
+    )
+
+    console.print(table)
 
 # ------------------------------------------------------------
 # Main
@@ -1423,13 +1524,19 @@ def main():
     print_summary(results)
 
     # Parsed Authentication Results
-    if auth_results:
-        report_eml(auth_results)
+    # if auth_results:
+    #     report_eml(auth_results)
 
     # Perform Spoofing
     if args.spoof:
         spoof_result = perform_spoof_test(args.domain, args.spoof)
         report_spoof(spoof_result)
+
+    # Evidence Tables
+    report_configuration_validation(results)
+
+    if auth_results:
+        report_authentication_validation(auth_results)
 
     # Generate the Stock Text for Markdown
     commentary = build_commentary(args.domain, results, auth_results)
