@@ -5,10 +5,9 @@ Email-Audit
 
 Author: Charalampos Spanias (mollysec)
 
-A lightweight email security assessment tool for analysing
-SPF, DKIM, DMARC, and MTA-STS configurations, validating
-authentication results from exported emails, and performing
-controlled spoofing assessments.
+A lightweight email security assessment tool for analysing SPF, DKIM, DMARC, 
+and MTA-STS configurations, validating authentication results from exported 
+emails, and performing controlled spoofing assessments.
 
 Article:
 Email Security Explained: SPF, DKIM, DMARC, and MTA-STS
@@ -16,6 +15,7 @@ https://mollysec.com/posts/email-security-explained/
 """
 
 import argparse
+import json
 import subprocess
 import re
 import socket
@@ -23,17 +23,15 @@ import urllib.request
 import tempfile
 import os
 
+from email import policy
+from email.parser import BytesParser
 from rich.console import Console
 from rich.table import Table
 from shutil import which
 
-from email import policy
-from email.parser import BytesParser
-
-
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Constants
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 # Colour Definitions
 COLOR_GREEN = "\033[0;32m"
@@ -72,17 +70,6 @@ CONTROL_DEFINITIONS = {
 }
 
 
-# Controls Overview Table Mapping
-STATUS_MAP = {
-    "SECURE": "Fully Implemented",
-    "PRESENT": "Fully Implemented",
-    "ACCEPTABLE": "Partially Implemented",
-    "INSECURE": "Requires Review",
-    "MISSING": "Not Implemented",
-    "UNKNOWN": "Unable to Confirm"
-}
-
-
 # References
 REFERENCES = {
     "cccs": "https://www.cyber.gc.ca/en/guidance/implementation-guidance-email-domain-protection",
@@ -94,6 +81,46 @@ REFERENCES = {
     "mta_sts": "https://datatracker.ietf.org/doc/html/rfc8461"
 }
 
+
+# Findings
+FINDING_MAP = {
+
+    ("SPF", "MISSING"): {
+        "id": "missing-spf",
+        "description": "No SPF record was identified for {domain}."
+    },
+
+    ("DMARC", "MISSING"): {
+        "id": "missing-dmarc",
+        "description": "No DMARC record was identified for {domain}."
+    },
+
+    ("DKIM", "UNKNOWN"): {
+        "id": "missing-dkim",
+        "description": "No DKIM selector could be identified for {domain}."
+    },
+
+    ("MTA-STS", "MISSING"): {
+        "id": "missing-mta-sts",
+        "description": "No MTA-STS policy was identified for {domain}."
+    },
+
+    ("MTA-STS", "UNKNOWN"): {
+        "id": "invalid-mta-sts",
+        "description": (
+            "An MTA-STS DNS record was identified for {domain}; however, the "
+            "associated policy could not be retrieved or validated."
+        )
+    },
+
+    ("SPF", "INSECURE"): {
+        "id": "permissive-spf",
+        "description": (
+            "The SPF record for {domain} contains '+all', permitting any host "
+            "on the Internet to send email on behalf of the domain."
+        )
+    }
+}
 
 # Controls Overview Table Mapping
 MTA_MAP = {
@@ -109,13 +136,13 @@ DMARC_MAP = {
     "none": "Monitoring"
 }
 
+
 # Initialise Rich Table
 console = Console()
 
-
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Formatting
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def colour_assessment(value):
 
@@ -167,9 +194,10 @@ def rich_assessment_colour(status):
 
     return f"[red]{status}[/red]"
 
-# ------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
 # Utilities
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def run_command(command):
     
@@ -212,9 +240,9 @@ def print_assessment(result):
     print()
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # DNS Retrieval
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def get_spf_record(domain):
     output = run_command(["dig", "+short", domain, "TXT"])
@@ -276,9 +304,9 @@ def check_dkim_dns(domain, selector=None):
     return "", "", False
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # SPF Assessment
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def assess_spf(record):
 
@@ -342,9 +370,9 @@ def assess_spf(record):
     return result
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # DKIM Assessment
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 COMMON_DKIM_SELECTORS = ["default", "selector1", "selector2", "google"]
 
@@ -403,9 +431,9 @@ def assess_dkim(selector, record, dkim_found, auth_results=None):
     return result
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # DMARC Assessment
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def assess_dmarc(record):
 
@@ -498,9 +526,9 @@ def assess_dmarc(record):
     return result
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # MTA-STS Assessment
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def assess_mta_sts(record, policy):
 
@@ -559,7 +587,7 @@ def assess_mta_sts(record, policy):
     else:
 
         result["impact"] = ("MTA-STS support is advertised, but the policy could not be retrieved or parsed successfully.")
-        result["assessment"] = "PRESENT"
+        result["assessment"] = "UNKNOWN"
         result["score"] = 1
 
     result["policy"] = policy
@@ -622,9 +650,9 @@ def parse_mta_sts_policy(policy):
     return result
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Spoofing Implementation
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 # Check if local SMTP is up
 def smtp_server_running():
@@ -637,13 +665,15 @@ def smtp_server_running():
     except Exception:
         return False
 
-# Perform the spoofing test
+
 def perform_spoof_test(domain, recipient):
 
-    subject = "Subject: Controlled Spoofing Assessment"
-    body = f"This email was generated as part of an authorised security assessment to validate SPF, DKIM, " \
-        f"and DMARC enforcement for the {domain} domain."
     sender = f"ceo@{domain}"
+    subject = "Subject: Controlled Spoofing Assessment"
+    body = (
+        "This email was generated as part of an authorised security assessment "
+        f"to validate SPF, DKIM, and DMARC enforcement for the {domain} domain."
+    )
 
     # Variables shown on the report
     result = {
@@ -654,13 +684,26 @@ def perform_spoof_test(domain, recipient):
         "assessment": "",
         "impact": ""
     }
-    
-    # Check if an SMPT server is available
+
+    # Check swaks is installed
+    if not which("swaks"):
+
+        result["assessment"] = "SWAKS NOT INSTALLED"
+        result["impact"] = (
+            "The swaks utility is required to perform spoofing tests. Install "
+            "swaks and rerun the assessment."
+        )
+
+        return result
+
+    # Check SMTP relay
     if not smtp_server_running():
 
-        result["assessment"] = ("LOCAL SMTP RELAY NOT AVAILABLE")
-        result["impact"] = ("No SMTP service was detected on localhost:25. Start a local SMTP relay (e.g. Postfix) "
-            "before performing a spoofing assessment.")
+        result["assessment"] = "LOCAL SMTP RELAY NOT AVAILABLE"
+        result["impact"] = (
+            "No SMTP service was detected on localhost:25. Start a local SMTP "
+            "relay (e.g. Postfix) before performing a spoofing assessment."
+        )
 
         return result
 
@@ -672,9 +715,6 @@ def perform_spoof_test(domain, recipient):
         "--body", body,
         "--server", "localhost"
     ])
-
-    # Code for debugging SWAKS errors
-    #print(repr(output))
     
     output = output.lower()
 
@@ -719,9 +759,9 @@ def report_spoof(result):
     print()
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # EML Implementation
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 # EML Parsing
 def parse_eml_file(path):
@@ -771,21 +811,10 @@ def parse_eml_file(path):
 
     return result
 
-# EML Reporting
-def report_eml(results):
 
-    print_section("OBSERVED AUTHENTICATION RESULTS")
-
-    print(f"SPF:   {colour_auth_result(results['spf'].upper())}")
-    print(f"DKIM:  {colour_auth_result(results['dkim'].upper())}")
-    print(f"DMARC: {colour_auth_result(results['dmarc'].upper())}")
-
-    print()
-
-
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Convert MSG to EML
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def convert_msg_to_eml(msg_file):
 
@@ -802,9 +831,9 @@ def convert_msg_to_eml(msg_file):
     return eml_path
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Executive Summary
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def build_executive_summary(domain, results, auth_results=None):
 
@@ -816,7 +845,7 @@ def build_executive_summary(domain, results, auth_results=None):
     authentication_strong = (
         spf["assessment"] in ["SECURE", "ACCEPTABLE"]
         and dkim["assessment"] == "PRESENT"
-        and dmarc["assessment"] == "SECURE"
+        and dmarc["assessment"] in ["SECURE", "ACCEPTABLE"]
     )
 
     authentication_present = (
@@ -833,6 +862,7 @@ def build_executive_summary(domain, results, auth_results=None):
     )
 
     mta_missing = (mta["assessment"] == "MISSING")
+    mta_validated = (mta["assessment"] in ["SECURE", "ACCEPTABLE"])
 
     positive_controls = 0
 
@@ -842,10 +872,10 @@ def build_executive_summary(domain, results, auth_results=None):
     if dkim["assessment"] == "PRESENT":
         positive_controls += 1
 
-    if dmarc["assessment"] == "SECURE":
+    if dmarc["assessment"] in ["SECURE", "ACCEPTABLE"]:
         positive_controls += 1
 
-    if mta["assessment"] == "PRESENT":
+    if mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
         positive_controls += 1
 
     text = []
@@ -872,10 +902,18 @@ def build_executive_summary(domain, results, auth_results=None):
             "may have limited ability to verify the authenticity of email communications originating from the domain.")
         text.append("")
 
-    if mta["assessment"] == "PRESENT":
+    if mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
 
-        text.append("MTA-STS support was also identified, providing additional assurance that email communications are "
-            "delivered over trusted encrypted channels and helping reduce exposure to SMTP downgrade attacks.")
+        text.append(
+            "MTA-STS support was also identified, providing additional assurance "
+            "that email communications are delivered over trusted encrypted channels."
+        )
+        text.append("")
+
+    elif mta["assessment"] == "UNKNOWN":
+
+        text.append("An MTA-STS DNS record was identified; however, the associated policy could not be successfully retrieved "
+            "or validated. Consequently, it was not possible to confirm that MTA-STS was operating as intended.")
         text.append("")
 
     elif mta["assessment"] == "MISSING" and positive_controls > 0:
@@ -890,7 +928,7 @@ def build_executive_summary(domain, results, auth_results=None):
             "email authentication and transport security controls increases exposure to spoofing, phishing "
             "and other forms of email-based attack.")
 
-    elif authentication_strong and not mta_missing:
+    elif authentication_strong and mta_validated:
 
         text.append("Overall, the domain demonstrated a strong email security posture. The reviewed controls "
             "broadly aligned with recognised email security best practices and no significant weaknesses were identified.")
@@ -900,6 +938,11 @@ def build_executive_summary(domain, results, auth_results=None):
         text.append("Overall, the domain demonstrated a generally mature email security posture with effective anti-spoofing "
             "controls, although opportunities were identified to further strengthen email transport security.")
 
+    elif authentication_strong:
+
+        text.append("Overall, the domain demonstrated a strong email authentication posture. SPF, DKIM and DMARC controls were "
+            "identified and observed to be functioning correctly; however, MTA-STS could not be fully validated during testing.")
+
     elif authentication_present and mta_missing:
 
         text.append("Overall, the domain demonstrated a generally mature email security posture with effective email "
@@ -907,7 +950,7 @@ def build_executive_summary(domain, results, auth_results=None):
 
     else:
 
-        text.append("Overall, the domain demonstrated a partially implemented email security posture. Whilst a number of "
+        text.append("Overall, the domain demonstrated a moderate email security posture. Whilst a number of "
             "controls were identified, additional improvements would further reduce exposure to spoofing, "
             "impersonation and email-based attacks.")
 
@@ -935,7 +978,7 @@ def build_commentary(domain, results, auth_results=None):
     # Summary Table
     #----------------------------
 
-    text.append("### Controls Overview")
+    text.append("### Controls Configuration Summary")
     text.append("")
 
     # SPF value
@@ -965,12 +1008,12 @@ def build_commentary(domain, results, auth_results=None):
     mode = mta.get("policy", {}).get("mode", "")
     mta_config = MTA_MAP.get(mode, "Not Present" if mta["assessment"] == "MISSING" else "Unknown")
 
-    text.append("| Control | Configuration | Status |")
-    text.append("|---------|---------------|--------|")
-    text.append(f"| SPF | {spf_config} | {STATUS_MAP[spf['assessment']]} |")
-    text.append(f"| DKIM | {dkim_config} | {STATUS_MAP[dkim['assessment']]} |")
-    text.append(f"| DMARC | {dmarc_config} | {STATUS_MAP[dmarc['assessment']]} |")
-    text.append(f"| MTA-STS | {mta_config} | {STATUS_MAP[mta['assessment']]} |")
+    text.append("| Control  | Configuration  |")
+    text.append("|----------|----------------|")
+    text.append(f"| SPF     | {spf_config}   |")
+    text.append(f"| DKIM    | {dkim_config}  |")
+    text.append(f"| DMARC   | {dmarc_config} |")
+    text.append(f"| MTA-STS | {mta_config}   |")
 
     text.append("")
 
@@ -986,17 +1029,17 @@ def build_commentary(domain, results, auth_results=None):
 
     if spf["assessment"] == "SECURE":
 
-        text.append("The domain utilised a restrictive SPF configuration with a hard-fail enforcement policy, helping receiving mail systems identify "
+        text.append("The domain implemented SPF using a restrictive hard-fail enforcement policy (-all), helping receiving mail systems identify "
             "authorised sending infrastructure and reject unauthorised sources.")
 
     elif spf["assessment"] == "ACCEPTABLE":
 
-        text.append("The domain implemented SPF and identified authorised mail infrastructure. A soft-fail policy was observed. Whilst less "
+        text.append("The domain implemented SPF and identified authorised mail infrastructure. A soft-fail policy (~all) was observed. Whilst less "
             "restrictive than a hard-fail policy, SPF should still provide value when combined with DMARC enforcement.")
 
     elif spf["assessment"] == "INSECURE":
 
-        text.append("The SPF record utilised a '+all' mechanism, effectively authorising any host on the Internet to send email on behalf of the domain. "
+        text.append("The SPF record utilised the permissive '+all' mechanism, effectively authorising any host on the Internet to send email on behalf of the domain. "
             "This significantly reduces the effectiveness of SPF as an anti-spoofing control and may increase exposure to email impersonation attacks.")
 
     elif spf["assessment"] == "MISSING":
@@ -1016,19 +1059,10 @@ def build_commentary(domain, results, auth_results=None):
             text.append("The following authorised sending services were identified:")
 
             for include in includes:
-                text.append(f"- {include}")
+                provider = include.replace("include:", "")
+                text.append(f"- {provider}")
 
             text.append("")
-
-    if spf["assessment"] == "SECURE":
-
-        text.append("This configuration helps reduce the risk of email spoofing and improves confidence in the authenticity of messages originating "
-            "from the domain.")
-
-    elif spf["assessment"] == "ACCEPTABLE":
-
-        text.append("Although a soft-fail policy is less restrictive than a hard-fail configuration, the control should still provide value when combined "
-            "with effective DMARC enforcement.")
 
     text.append("")
 
@@ -1120,6 +1154,7 @@ def build_commentary(domain, results, auth_results=None):
             text.append("")
 
             for address in tags["rua"].split(","):
+                address = address.strip().replace("mailto:", "")
                 text.append(f"- {address.strip()}")
 
         if dmarc["assessment"] == "SECURE":
@@ -1142,9 +1177,9 @@ def build_commentary(domain, results, auth_results=None):
                 "meaningful protection against domain spoofing or email impersonation attacks.")
             text.append("")
 
-    #---------------------------------------------------------------------------
+    #----------------------------
     # MTA-STS
-    #---------------------------------------------------------------------------
+    #----------------------------
 
     text.append("### Mail Transfer Agent Strict Transport Security (MTA-STS)")
     text.append("")
@@ -1206,12 +1241,10 @@ def build_commentary(domain, results, auth_results=None):
         text.append("As a result, email delivery may continue to rely on opportunistic TLS without providing "
             "meaningful protection against SMTP downgrade attacks.")
 
-    elif mta["assessment"] == "PRESENT":
+    elif mta["assessment"] == "UNKNOWN":
 
-        text.append("An MTA-STS DNS record was identified; however, the associated policy could not be "
-            "successfully retrieved or validated.")
-        text.append("")
-        text.append("Consequently, it was not possible to confirm that MTA-STS was operating as intended.")
+        text.append("An MTA-STS DNS record was also identified; however, the associated policy could not be successfully "
+            "retrieved or validated. Consequently, it was not possible to confirm that MTA-STS was operating as intended.")
 
     elif mta["assessment"] == "MISSING":
 
@@ -1223,43 +1256,34 @@ def build_commentary(domain, results, auth_results=None):
     return "\n".join(text)
 
 
-#-------------------------------------------------------------------------------
-# Final Summary Table
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
+# Final Posture Table
+# ------------------------------------------------------------
+def print_posture(results):
 
-def print_summary(results):
-
-    print_section("EMAIL SECURITY SUMMARY")
-
-    for result in results:
-
-        print(f"{result['control']:<12}{colour_assessment(result['assessment'])}")
-
-    print()
-    
     total_score = sum(r["score"] for r in results)
     max_score = sum(r["max_score"] for r in results)
-    percentage = (total_score / max_score)
+
+    percentage = total_score / max_score
 
     if percentage == 1:
         overall = "EXCELLENT"
-
     elif percentage >= 0.75:
         overall = "GOOD"
-
     elif percentage >= 0.50:
         overall = "MODERATE"
-
     else:
         overall = "WEAK"
 
-    print(f"Overall Security Posture: {colour_posture(overall)} ({total_score}/{max_score})")
+    print()
+    print("Overall Security Posture: "
+          f"{colour_posture(overall)} ({total_score}/{max_score})")
     print()
 
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
 # Recommendations
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
 
 def build_recommendations(domain, results):
 
@@ -1292,6 +1316,9 @@ def build_recommendations(domain, results):
     if mta["assessment"] == "MISSING":
         recommendations.append("Deploy MTA-STS to strengthen SMTP transport security and reduce the risk of downgrade attacks.")
 
+    elif mta["assessment"] == "UNKNOWN":
+        recommendations.append("Review the published MTA-STS configuration and ensure the policy can be successfully retrieved and validated by external systems.")
+
     if all_missing:
     
             text = ("The assessment identified the absence of SPF, DKIM, DMARC and MTA-STS controls. The organisation should implement a baseline "
@@ -1321,9 +1348,10 @@ def build_recommendations(domain, results):
 
     return text
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
 # References
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
+
 def build_references(results):
 
     refs = {"cccs", "ncsc"}
@@ -1343,7 +1371,7 @@ def build_references(results):
         refs.add("dmarc")
         refs.add("dmarc_org")
 
-    if mta["assessment"] == "MISSING":
+    if mta["assessment"] in ["MISSING", "UNKNOWN"]:
         refs.add("mta_sts")
 
     text = "\n\n### References\n\n"
@@ -1355,9 +1383,10 @@ def build_references(results):
     return text
 
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
 # Markdown Export
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------
+
 def export_markdown(domain, commentary, solution, results, auth_results=None):
 
     filename = f"{domain}.md"
@@ -1376,12 +1405,65 @@ def export_markdown(domain, commentary, solution, results, auth_results=None):
 
     return filename
 
+
+#-------------------------------------------------------------------------------
+# JSON Export
+#-------------------------------------------------------------------------------
+def build_findings(domain, results):
+
+    findings = [{
+        "id": "email-audit",
+        "description":
+            f"Email security controls were reviewed for {domain}, including "
+            "SPF, DKIM, DMARC and MTA-STS."
+    }]
+
+    checks = [
+        ("SPF", results[0]["assessment"]),
+        ("DKIM", results[1]["assessment"]),
+        ("DMARC", results[2]["assessment"]),
+        ("MTA-STS", results[3]["assessment"])
+    ]
+
+    for control, assessment in checks:
+
+        key = (control, assessment)
+
+        if key not in FINDING_MAP:
+            continue
+
+        findings.append({
+            "id": FINDING_MAP[key]["id"],
+            "description": FINDING_MAP[key]["description"].format(domain=domain)
+        })
+
+    return findings
+
+
+def export_json(domain, findings):
+
+    filename = f"{domain}.json"
+
+    with open(filename, "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "tool": "email-audit",
+                "domain": domain,
+                "findings": findings
+            },
+            handle,
+            indent=4
+        )
+
+    return filename
+
+
 #-------------------------------------------------------------------------------
 # Screenshot Evidence
 #-------------------------------------------------------------------------------
 def report_authentication_validation(auth_results):
 
-    table = Table(title="Authentication Validation")
+    table = Table(title="Authentication Evidence")
 
     table.add_column("Control", style="cyan")
     table.add_column("Result")
@@ -1412,7 +1494,7 @@ def report_configuration_validation(results):
     dmarc = results[2]
     mta = results[3]
 
-    table = Table(title="Configuration Validation")
+    table = Table(title="Configuration Evidence")
 
     table.add_column("Control", style="cyan")
     table.add_column("Configuration")
@@ -1460,6 +1542,7 @@ def report_configuration_validation(results):
     )
 
     console.print(table)
+
 
 # ------------------------------------------------------------
 # Main
@@ -1520,34 +1603,41 @@ def main():
     for result in results:
         print_assessment(result)
 
-    # Final Summary Table
-    print_summary(results)
-
-    # Parsed Authentication Results
-    # if auth_results:
-    #     report_eml(auth_results)
+    # Posture Table
+    print_posture(results)
 
     # Perform Spoofing
     if args.spoof:
         spoof_result = perform_spoof_test(args.domain, args.spoof)
         report_spoof(spoof_result)
 
+    # Build Findings
+    findings = build_findings(args.domain, results)
+
     # Evidence Tables
+    print_section("SCREENSHOT EVIDENCE")
     report_configuration_validation(results)
 
     if auth_results:
+        print()
         report_authentication_validation(auth_results)
 
     # Generate the Stock Text for Markdown
     commentary = build_commentary(args.domain, results, auth_results)
     solution = build_recommendations(args.domain, results)
 
+    # Generate JSON
+    json_file = export_json(args.domain, findings)
+
     # Generate Markdown
     md_file = export_markdown(args.domain, commentary, solution, results, auth_results)
 
     print()
-    print(f"{COLOR_GREEN}[+] Assessment complete{COLOR_RESET}")
-    print(f"{COLOR_GREEN}[+] Markdown Output   : {md_file}{COLOR_RESET}")
+    print(f"{COLOR_GREEN}[+] Assessment Complete{COLOR_RESET}")
+    print()
+    print(f"    Findings Exported : {len(findings)}")
+    print(f"    JSON Output       : {json_file}")
+    print(f"    Markdown Output   : {md_file}")
     print()
 
 
