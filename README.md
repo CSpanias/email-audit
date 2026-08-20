@@ -238,12 +238,12 @@ A review of SPF, DKIM, DMARC and MTA-STS controls was performed against the <dom
 
 ### Controls Overview
 
-| Control | Configuration | Status |
-|---------|---------------|--------|
-| SPF | Hard Fail (-all) | Fully Implemented |
-| DKIM | Selector Present | Fully Implemented |
-| DMARC | Quarantine | Partially Implemented |
-| MTA-STS | Not Present | Not Implemented |
+| Control | Configuration |
+|---------|---------------|
+| SPF | Hard Fail (-all) |
+| DKIM | Selector Present |
+| DMARC | Quarantine |
+| MTA-STS | Not Present |
 
 ### Sender Policy Framework (SPF)
 
