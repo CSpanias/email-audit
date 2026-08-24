@@ -880,81 +880,248 @@ def build_executive_summary(domain, results, auth_results=None):
 
     text = []
 
-    text.append(f"An email security review was performed against the {domain} domain to assess the implementation "
-        "of industry-standard email authentication and transport security controls.")
-    text.append("")
+    #---------------------------------------------------------------------------
+    # Introduction (first paragraph)
+    #---------------------------------------------------------------------------
+    intro = (
+        f"An email security review was performed against the {domain} "
+        "domain to assess the implementation and effectiveness of "
+        "industry-standard email authentication and transport security "
+        "controls."
+    )
 
+    text.append(intro)
+
+    #---------------------------------------------------------------------------
+    # Positive Controls (second paragraph)
+    #---------------------------------------------------------------------------   
     if authentication_present:
 
-        text.append("The assessment identified the implementation of SPF, DKIM and DMARC controls designed to "
-            "reduce the risk of domain spoofing and improve confidence in the authenticity of email communications.")
-        text.append("")
+        positive = (
+            "SPF, DKIM and DMARC controls were identified during "
+            "the assessment. "
+        )
 
         if authentication_working:
 
-            text.append("Successful SPF, DKIM and DMARC validation was observed within the supplied email "
-                "sample, indicating that the authentication controls were functioning as intended.")
-            text.append("")
+            positive += (
+                "Successful validation of these controls was observed "
+                "in the supplied email sample, providing assurance "
+                "that they were functioning as intended. "
+            )
 
-    elif positive_controls == 0:
+        elif auth_results is None:
 
-        text.append("The assessment did not identify SPF, DKIM, DMARC or MTA-STS controls. As a result, receiving organisations "
-            "may have limited ability to verify the authenticity of email communications originating from the domain.")
-        text.append("")
+            positive += (
+                "Email authentication controls were identified; however, "
+                "their operation could not be validated using a supplied "
+                "email sample. "
+            )
 
-    if mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
+        elif auth_results:
 
-        text.append(
-            "MTA-STS support was also identified, providing additional assurance "
-            "that email communications are delivered over trusted encrypted channels."
-        )
-        text.append("")
+            positive += (
+                "Validation of one or more email authentication controls "
+                "was unsuccessful, indicating that the implemented controls "
+                "may not be operating as intended and reducing confidence "
+                "in the effectiveness of the domain's anti-spoofing "
+                "protections. "
+            )
 
-    elif mta["assessment"] == "UNKNOWN":
+        if authentication_strong:
 
-        text.append("An MTA-STS DNS record was identified; however, the associated policy could not be successfully retrieved "
-            "or validated. Consequently, it was not possible to confirm that MTA-STS was operating as intended.")
-        text.append("")
+            positive += (
+                "Collectively, these controls align with recognised "
+                "industry practices and significantly reduce exposure "
+                "to domain spoofing, impersonation attacks and "
+                "fraudulent email activity."
+            )
 
-    elif mta["assessment"] == "MISSING" and positive_controls > 0:
+        else:
 
-        text.append("No MTA-STS policy was identified. This may reduce assurance that email communications are "
-            "consistently delivered using trusted encrypted channels between mail systems.")
-        text.append("")
-
-    if positive_controls == 0:
-
-        text.append("Overall, the domain demonstrated a weak email security posture. The absence of key "
-            "email authentication and transport security controls increases exposure to spoofing, phishing "
-            "and other forms of email-based attack.")
-
-    elif authentication_strong and mta_validated:
-
-        text.append("Overall, the domain demonstrated a strong email security posture. The reviewed controls "
-            "broadly aligned with recognised email security best practices and no significant weaknesses were identified.")
-
-    elif authentication_strong and mta_missing:
-
-        text.append("Overall, the domain demonstrated a generally mature email security posture with effective anti-spoofing "
-            "controls, although opportunities were identified to further strengthen email transport security.")
-
-    elif authentication_strong:
-
-        text.append("Overall, the domain demonstrated a strong email authentication posture. SPF, DKIM and DMARC controls were "
-            "identified and observed to be functioning correctly; however, MTA-STS could not be fully validated during testing.")
-
-    elif authentication_present and mta_missing:
-
-        text.append("Overall, the domain demonstrated a generally mature email security posture with effective email "
-            "authentication controls, although opportunities were identified to further strengthen email transport security.")
+            positive += (
+                "However, opportunities were identified to further "
+                "strengthen the effectiveness of the domain's email "
+                "authentication controls."
+            )
 
     else:
 
-        text.append("Overall, the domain demonstrated a moderate email security posture. Whilst a number of "
-            "controls were identified, additional improvements would further reduce exposure to spoofing, "
-            "impersonation and email-based attacks.")
+        positive += (
+            "The assessment identified weaknesses affecting the "
+            "domain's ability to verify the authenticity of email "
+            "communications, increasing exposure to spoofing and "
+            "impersonation attacks."
+        )
 
-    return "\n".join(text)
+    text.append(positive)
+
+    #-----------------------------------------------------------------------
+    # Remaining risk (third paragraph)
+    #-----------------------------------------------------------------------
+    if positive_controls == 0:
+
+        text.append(
+            "The assessment identified significant weaknesses affecting the "
+            "domain's email security posture. SPF, DKIM, DMARC and MTA-STS "
+            "controls were not identified, limiting the ability of receiving "
+            "organisations to verify the authenticity of email communications "
+            "and increasing exposure to spoofing and impersonation attacks."
+        )
+    
+
+    elif mta["assessment"] == "MISSING":
+
+        text.append(
+            "The assessment also identified an opportunity to further "
+            "strengthen email security. No MTA-STS policy was identified. "
+            "Whilst this does not affect the effectiveness of email "
+            "authentication controls, it reduces assurance that email "
+            "communications are consistently protected against downgrade "
+            "or interception risks during transit between mail systems."
+        )
+
+    elif mta["assessment"] == "UNKNOWN":
+
+        text.append(
+            "The assessment also identified an opportunity to further "
+            "strengthen email security. An MTA-STS DNS record was identified; "
+            "however, the associated policy could not be validated. "
+            "Consequently, it was not possible to confirm that the control was "
+            "operating as intended."
+        )
+
+    elif mta_validated:
+
+        text.append(
+            "The assessment also identified effective email transport "
+            "security controls through the implementation of MTA-STS. "
+            "This provides additional assurance that email communications "
+            "remain protected whilst in transit between mail systems."
+        )
+
+    #-----------------------------------------------------------------------
+    # Conclusion (fourth paragraph)
+    #-----------------------------------------------------------------------
+    if authentication_strong and mta_validated:
+
+        text.append(
+            "Overall, the domain demonstrated a mature email security "
+            "posture. Effective authentication and transport security "
+            "controls were identified and aligned with recognised industry "
+            "practices, significantly reducing exposure to spoofing, "
+            "impersonation and email-based threats."
+        )
+
+    elif authentication_strong:
+
+        text.append(
+            "Overall, the domain demonstrated a mature email security "
+            "posture. Effective authentication controls were implemented "
+            "and observed to be functioning correctly, significantly "
+            "reducing exposure to spoofing and impersonation attacks. "
+            "Addressing the remaining transport-security weakness would "
+            "further improve assurance that email communications remain "
+            "secure throughout delivery and strengthen resilience against "
+            "email-based threats."
+        )
+
+    elif authentication_present:
+
+        text.append(
+            "Overall, the domain demonstrated a generally effective "
+            "email security posture; however, opportunities remain to "
+            "further reduce exposure to spoofing, impersonation and "
+            "other email-based threats."
+        )
+
+    else:
+
+        text.append(
+            "Overall, the domain demonstrated a weak email security "
+            "posture. The absence of key authentication and transport "
+            "security controls increases the likelihood of email "
+            "spoofing, impersonation attacks and loss of trust in "
+            "email communications originating from the domain."
+        )
+
+    
+    # TODO: Legacy checks (to be removed when new checks are validated)
+    # text.append(f"An email security review was performed against the {domain} domain to assess the implementation "
+    #     "of industry-standard email authentication and transport security controls.")
+    # text.append("")
+
+    # if authentication_present:
+
+    #     text.append("The assessment identified the implementation of SPF, DKIM and DMARC controls designed to "
+    #         "reduce the risk of domain spoofing and improve confidence in the authenticity of email communications.")
+    #     text.append("")
+
+    #     if authentication_working:
+
+    #         text.append("Successful SPF, DKIM and DMARC validation was observed within the supplied email "
+    #             "sample, indicating that the authentication controls were functioning as intended.")
+    #         text.append("")
+
+    # elif positive_controls == 0:
+
+    #     text.append("The assessment did not identify SPF, DKIM, DMARC or MTA-STS controls. As a result, receiving organisations "
+    #         "may have limited ability to verify the authenticity of email communications originating from the domain.")
+    #     text.append("")
+
+    # if mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
+
+    #     text.append(
+    #         "MTA-STS support was also identified, providing additional assurance "
+    #         "that email communications are delivered over trusted encrypted channels."
+    #     )
+    #     text.append("")
+
+    # elif mta["assessment"] == "UNKNOWN":
+
+    #     text.append("An MTA-STS DNS record was identified; however, the associated policy could not be successfully retrieved "
+    #         "or validated. Consequently, it was not possible to confirm that MTA-STS was operating as intended.")
+    #     text.append("")
+
+    # elif mta["assessment"] == "MISSING" and positive_controls > 0:
+
+    #     text.append("No MTA-STS policy was identified. This may reduce assurance that email communications are "
+    #         "consistently delivered using trusted encrypted channels between mail systems.")
+    #     text.append("")
+
+    # if positive_controls == 0:
+
+    #     text.append("Overall, the domain demonstrated a weak email security posture. The absence of key "
+    #         "email authentication and transport security controls increases exposure to spoofing, phishing "
+    #         "and other forms of email-based attack.")
+
+    # elif authentication_strong and mta_validated:
+
+    #     text.append("Overall, the domain demonstrated a strong email security posture. The reviewed controls "
+    #         "broadly aligned with recognised email security best practices and no significant weaknesses were identified.")
+
+    # elif authentication_strong and mta_missing:
+
+    #     text.append("Overall, the domain demonstrated a generally mature email security posture with effective anti-spoofing "
+    #         "controls, although opportunities were identified to further strengthen email transport security.")
+
+    # elif authentication_strong:
+
+    #     text.append("Overall, the domain demonstrated a strong email authentication posture. SPF, DKIM and DMARC controls were "
+    #         "identified and observed to be functioning correctly; however, MTA-STS could not be fully validated during testing.")
+
+    # elif authentication_present and mta_missing:
+
+    #     text.append("Overall, the domain demonstrated a generally mature email security posture with effective email "
+    #         "authentication controls, although opportunities were identified to further strengthen email transport security.")
+
+    # else:
+
+    #     text.append("Overall, the domain demonstrated a moderate email security posture. Whilst a number of "
+    #         "controls were identified, additional improvements would further reduce exposure to spoofing, "
+    #         "impersonation and email-based attacks.")
+
+    return "\n\n".join(text)
 
 
 # ------------------------------------------------------------
