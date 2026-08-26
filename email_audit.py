@@ -842,28 +842,46 @@ def build_executive_summary(domain, results, auth_results=None):
     dmarc = results[2]
     mta = results[3]
 
+    # Authentication results were present and could be evaluated
+    authentication_validated = (
+        auth_results
+        and any(
+            auth_results.get(x) in ["pass", "fail"]
+            for x in ["spf", "dkim", "dmarc"]
+        )
+    )
+
+
+    # Authentication controls broadly align with recognised industry practices
     authentication_strong = (
         spf["assessment"] in ["SECURE", "ACCEPTABLE"]
         and dkim["assessment"] == "PRESENT"
         and dmarc["assessment"] in ["SECURE", "ACCEPTABLE"]
     )
 
+    # SPF, DKIM and DMARC controls were identified during the assessment
     authentication_present = (
         spf["assessment"] != "MISSING"
         and dkim["assessment"] == "PRESENT"
         and dmarc["assessment"] != "MISSING"
     )
 
+    # SPF, DKIM and DMARC controls were identified and validated
     authentication_working = (
-        auth_results
+        authentication_validated
         and auth_results.get("spf") == "pass"
         and auth_results.get("dkim") == "pass"
         and auth_results.get("dmarc") == "pass"
     )
 
-    mta_missing = (mta["assessment"] == "MISSING")
-    mta_validated = (mta["assessment"] in ["SECURE", "ACCEPTABLE"])
+    # SPF, DKIM and DMARC controls were identified, but validation was 
+    # unsuccessful
+    authentication_failed = (
+        authentication_validated
+        and not authentication_working
+    )
 
+    # Experimental scoring
     positive_controls = 0
 
     if spf["assessment"] in ["SECURE", "ACCEPTABLE"]:
@@ -895,6 +913,8 @@ def build_executive_summary(domain, results, auth_results=None):
     #---------------------------------------------------------------------------
     # Positive Controls (second paragraph)
     #---------------------------------------------------------------------------   
+    
+    # SPF, DKIM and DMARC controls were identified during the assessment
     if authentication_present:
 
         positive = (
@@ -902,6 +922,7 @@ def build_executive_summary(domain, results, auth_results=None):
             "the assessment. "
         )
 
+        # SPF, DKIM and DMARC controls were identified and validated
         if authentication_working:
 
             positive += (
@@ -910,44 +931,44 @@ def build_executive_summary(domain, results, auth_results=None):
                 "that they were functioning as intended. "
             )
 
-        elif auth_results is None:
+            # Authentication controls broadly align with recognised industry 
+            # practices
+            if authentication_strong:
 
-            positive += (
-                "Email authentication controls were identified; however, "
-                "their operation could not be validated using a supplied "
-                "email sample. "
-            )
+                positive += (
+                    "Collectively, these controls align with recognised "
+                    "industry practices and significantly reduce exposure "
+                    "to domain spoofing, impersonation attacks and "
+                    "fraudulent email activity."
+                )
 
-        elif auth_results:
+        # SPF, DKIM and DMARC controls were identified, but validation was 
+        # unsuccessful
+        elif authentication_failed:
 
             positive += (
                 "Validation of one or more email authentication controls "
-                "was unsuccessful, indicating that the implemented controls "
-                "may not be operating as intended and reducing confidence "
-                "in the effectiveness of the domain's anti-spoofing "
-                "protections. "
+                "was unsuccessful, indicating that the implemented "
+                "controls may not be operating as intended and reducing "
+                "confidence in the effectiveness of the domain's "
+                "anti-spoofing protections."
             )
 
-        if authentication_strong:
-
-            positive += (
-                "Collectively, these controls align with recognised "
-                "industry practices and significantly reduce exposure "
-                "to domain spoofing, impersonation attacks and "
-                "fraudulent email activity."
-            )
-
+        # SPF, DKIM and DMARC controls were identified; however, the supplied
+        # email sample did not contain sufficient authentication results for
+        # validation.
         else:
 
             positive += (
-                "However, opportunities were identified to further "
-                "strengthen the effectiveness of the domain's email "
-                "authentication controls."
+                "Email authentication controls were identified; however, "
+                "the supplied email sample did not contain sufficient "
+                "authentication results to validate their operation."
             )
 
+    # Authentication controls were missing or inadequately implemented
     else:
 
-        positive += (
+        positive = (
             "The assessment identified weaknesses affecting the "
             "domain's ability to verify the authenticity of email "
             "communications, increasing exposure to spoofing and "
@@ -991,7 +1012,7 @@ def build_executive_summary(domain, results, auth_results=None):
             "operating as intended."
         )
 
-    elif mta_validated:
+    elif mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
 
         text.append(
             "The assessment also identified effective email transport "
@@ -1003,7 +1024,11 @@ def build_executive_summary(domain, results, auth_results=None):
     #-----------------------------------------------------------------------
     # Conclusion (fourth paragraph)
     #-----------------------------------------------------------------------
-    if authentication_strong and mta_validated:
+    if (
+        authentication_strong
+        and authentication_working
+        and mta["assessment"] in ["SECURE", "ACCEPTABLE"]
+    ):
 
         text.append(
             "Overall, the domain demonstrated a mature email security "
@@ -1013,7 +1038,7 @@ def build_executive_summary(domain, results, auth_results=None):
             "impersonation and email-based threats."
         )
 
-    elif authentication_strong:
+    elif authentication_strong and authentication_working:
 
         text.append(
             "Overall, the domain demonstrated a mature email security "
@@ -1024,6 +1049,15 @@ def build_executive_summary(domain, results, auth_results=None):
             "further improve assurance that email communications remain "
             "secure throughout delivery and strengthen resilience against "
             "email-based threats."
+        )
+
+    elif authentication_strong and authentication_failed:
+
+        text.append(
+            "Overall, the domain demonstrated a generally mature email "
+            "security posture. Authentication controls were identified; "
+            "however, one or more validation checks were unsuccessful, "
+            "reducing assurance that the controls are operating as intended."
         )
 
     elif authentication_present:
@@ -1045,88 +1079,12 @@ def build_executive_summary(domain, results, auth_results=None):
             "email communications originating from the domain."
         )
 
-    
-    # TODO: Legacy checks (to be removed when new checks are validated)
-    # text.append(f"An email security review was performed against the {domain} domain to assess the implementation "
-    #     "of industry-standard email authentication and transport security controls.")
-    # text.append("")
-
-    # if authentication_present:
-
-    #     text.append("The assessment identified the implementation of SPF, DKIM and DMARC controls designed to "
-    #         "reduce the risk of domain spoofing and improve confidence in the authenticity of email communications.")
-    #     text.append("")
-
-    #     if authentication_working:
-
-    #         text.append("Successful SPF, DKIM and DMARC validation was observed within the supplied email "
-    #             "sample, indicating that the authentication controls were functioning as intended.")
-    #         text.append("")
-
-    # elif positive_controls == 0:
-
-    #     text.append("The assessment did not identify SPF, DKIM, DMARC or MTA-STS controls. As a result, receiving organisations "
-    #         "may have limited ability to verify the authenticity of email communications originating from the domain.")
-    #     text.append("")
-
-    # if mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
-
-    #     text.append(
-    #         "MTA-STS support was also identified, providing additional assurance "
-    #         "that email communications are delivered over trusted encrypted channels."
-    #     )
-    #     text.append("")
-
-    # elif mta["assessment"] == "UNKNOWN":
-
-    #     text.append("An MTA-STS DNS record was identified; however, the associated policy could not be successfully retrieved "
-    #         "or validated. Consequently, it was not possible to confirm that MTA-STS was operating as intended.")
-    #     text.append("")
-
-    # elif mta["assessment"] == "MISSING" and positive_controls > 0:
-
-    #     text.append("No MTA-STS policy was identified. This may reduce assurance that email communications are "
-    #         "consistently delivered using trusted encrypted channels between mail systems.")
-    #     text.append("")
-
-    # if positive_controls == 0:
-
-    #     text.append("Overall, the domain demonstrated a weak email security posture. The absence of key "
-    #         "email authentication and transport security controls increases exposure to spoofing, phishing "
-    #         "and other forms of email-based attack.")
-
-    # elif authentication_strong and mta_validated:
-
-    #     text.append("Overall, the domain demonstrated a strong email security posture. The reviewed controls "
-    #         "broadly aligned with recognised email security best practices and no significant weaknesses were identified.")
-
-    # elif authentication_strong and mta_missing:
-
-    #     text.append("Overall, the domain demonstrated a generally mature email security posture with effective anti-spoofing "
-    #         "controls, although opportunities were identified to further strengthen email transport security.")
-
-    # elif authentication_strong:
-
-    #     text.append("Overall, the domain demonstrated a strong email authentication posture. SPF, DKIM and DMARC controls were "
-    #         "identified and observed to be functioning correctly; however, MTA-STS could not be fully validated during testing.")
-
-    # elif authentication_present and mta_missing:
-
-    #     text.append("Overall, the domain demonstrated a generally mature email security posture with effective email "
-    #         "authentication controls, although opportunities were identified to further strengthen email transport security.")
-
-    # else:
-
-    #     text.append("Overall, the domain demonstrated a moderate email security posture. Whilst a number of "
-    #         "controls were identified, additional improvements would further reduce exposure to spoofing, "
-    #         "impersonation and email-based attacks.")
-
     return "\n\n".join(text)
 
 
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Technical Commentary
-# ------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def build_commentary(domain, results, auth_results=None):
 
@@ -1137,13 +1095,16 @@ def build_commentary(domain, results, auth_results=None):
 
     text = []
 
-    text.append(f"A review of SPF, DKIM, DMARC and MTA-STS controls was performed against the {domain} domain to assess "
-        "the implementation of email authentication and transport security controls.")
+    text.append(
+        "A review of SPF, DKIM, DMARC and MTA-STS controls was performed "
+        f"against the {domain} domain to assess the implementation of email "
+        "authentication and transport security controls."
+    )
     text.append("")
 
-    #----------------------------
+    #---------------------------------------------------------------------------
     # Summary Table
-    #----------------------------
+    #---------------------------------------------------------------------------
 
     text.append("### Controls Configuration Summary")
     text.append("")
@@ -1184,9 +1145,9 @@ def build_commentary(domain, results, auth_results=None):
 
     text.append("")
 
-    #----------------------------
+    #---------------------------------------------------------------------------
     # SPF
-    #----------------------------
+    #---------------------------------------------------------------------------
 
     text.append("### Sender Policy Framework (SPF)")
     text.append("")
@@ -1196,40 +1157,81 @@ def build_commentary(domain, results, auth_results=None):
 
     if spf["assessment"] == "SECURE":
 
-        text.append("The domain implemented SPF using a restrictive hard-fail enforcement policy (-all), helping receiving mail systems identify "
-            "authorised sending infrastructure and reject unauthorised sources.")
+        text.append(
+            "The domain implemented SPF using a restrictive hard-fail "
+            "enforcement policy (-all), helping receiving mail systems "
+            "identify authorised sending infrastructure and reject "
+            "unauthorised sources."
+        )
 
     elif spf["assessment"] == "ACCEPTABLE":
 
-        text.append("The domain implemented SPF and identified authorised mail infrastructure. A soft-fail policy (~all) was observed. Whilst less "
-            "restrictive than a hard-fail policy, SPF should still provide value when combined with DMARC enforcement.")
+        text.append(
+            "The domain implemented SPF and identified authorised mail "
+            "infrastructure. A soft-fail policy (~all) was observed. Whilst "
+            "less restrictive than a hard-fail policy, SPF should still "
+            "provide value when combined with DMARC enforcement."
+        )
 
     elif spf["assessment"] == "INSECURE":
 
-        text.append("The SPF record utilised the permissive '+all' mechanism, effectively authorising any host on the Internet to send email on behalf of the domain. "
-            "This significantly reduces the effectiveness of SPF as an anti-spoofing control and may increase exposure to email impersonation attacks.")
+        text.append(
+            "The SPF record utilised the permissive '+all' mechanism, "
+            "effectively authorising any host on the Internet to send email on "
+            "behalf of the domain. This significantly reduces the "
+            "effectiveness of SPF as an anti-spoofing control and may increase "
+            "exposure to email impersonation attacks."
+        )
 
     elif spf["assessment"] == "MISSING":
 
         text.append("No SPF record was identified for the domain.")
         text.append("")
-        text.append("As a result, receiving mail systems may be unable to reliably determine which hosts are "
-            "authorised to send email on behalf of the domain.")
+        text.append(
+            "As a result, receiving mail systems may be unable to reliably "
+            "determine which hosts are authorised to send email on behalf of "
+            "the domain."
+        )
 
     if spf["assessment"] in ["SECURE", "ACCEPTABLE"]:
 
-        includes = [x for x in spf["raw"].split() if x.startswith("include:")]
+        elements = spf["raw"].split()
+
+        includes = [
+            x.replace("include:", "")
+            for x in elements
+            if x.startswith("include:")
+        ]
+
+        ips = [
+            x.replace("ip4:", "").replace("ip6:", "")
+            for x in elements
+            if x.startswith(("ip4:", "ip6:"))
+        ]
 
         if includes:
 
             text.append("")
-            text.append("The following authorised sending services were identified:")
+            text.append(
+                "The following authorised sending services were identified:"
+            )
+            text.append("")
 
-            for include in includes:
-                provider = include.replace("include:", "")
+            for provider in includes:
                 text.append(f"- {provider}")
 
+        if ips:
+
             text.append("")
+            text.append(
+                "The following authorised IP addresses were identified:"
+            )
+            text.append("")
+
+            for ip in ips:
+                text.append(f"- {ip}")
+
+        text.append("")
 
     text.append("")
 
