@@ -12,7 +12,7 @@ dist/
 *.eml
 *.msg
 *.md
-
+*.json
 
 # Keep documentation
 !README.md
