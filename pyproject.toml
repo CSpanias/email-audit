@@ -23,4 +23,4 @@ keywords = [
 ]
 
 [project.scripts]
-email-audit = "email_audit:main"
+email-audit = "email_audit.cli:main"
