@@ -73,6 +73,7 @@ The tool follows the same assessment methodology typically used during an email 
 
 * Markdown report generation
 * JSON findings export
+* Optional SureFormat XML findings export
 * Rich console evidence tables
 
 ## Usage
@@ -87,7 +88,15 @@ email-audit <domain> --email <email_file>
 # Spoofing Test
 sudo service postfix start
 email-audit <domain> --spoof <recipient>
+
+# SureFormat XML instead of JSON findings
+email-audit <domain> --csacyber
 ```
+
+With `--csacyber`, the findings are written to `<domain>.xml` using the target
+domain as the SureFormat hostname; the Markdown report is still produced.
+Unmapped findings are reported and omitted. Existing files from earlier runs in
+other formats are not removed.
 
 ## Example Output
 

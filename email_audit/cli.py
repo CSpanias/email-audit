@@ -48,6 +48,8 @@ from email_audit.reporting.markdown import (
     export_markdown,
 )
 
+from email_audit.reporting.sureformat import export_sureformat
+
 from email_audit.reporting.remediation import (
     build_recommendations,
 )
@@ -97,6 +99,12 @@ def parse_arguments():
             "Recipient address for spoofing test "
             "(default ceo@<domain>)"
         )
+    )
+
+    parser.add_argument(
+        "--csacyber",
+        action="store_true",
+        help="Export SureFormat XML instead of JSON findings",
     )
 
     return parser.parse_args()
@@ -262,10 +270,11 @@ def main():
         spoof_result,
     )
 
-    json_file = export_json(
-        args.domain,
-        findings,
-    )
+    if args.csacyber:
+        findings_file, exported_count = export_sureformat(args.domain, findings)
+    else:
+        findings_file = export_json(args.domain, findings)
+        exported_count = len(findings)
 
     md_file = export_markdown(
         args.domain,
@@ -280,8 +289,10 @@ def main():
     # --------------------------------------------------------------------------
     print_completion_summary(
         findings,
-        json_file,
+        findings_file,
         md_file,
+        output_format="XML" if args.csacyber else "JSON",
+        exported_count=exported_count,
     )
 
 

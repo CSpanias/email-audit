@@ -140,8 +140,10 @@ def print_posture(results):
 
 def print_completion_summary(
     findings,
-    json_file,
+    findings_file,
     md_file,
+    output_format="JSON",
+    exported_count=None,
 ):
     """
     Display the assessment completion summary.
@@ -153,8 +155,8 @@ def print_completion_summary(
 
     print()
 
-    print(f"    Findings Exported : {len(findings)}")
-    print(f"    JSON Output       : {json_file}")
+    print(f"    Findings Exported : {len(findings) if exported_count is None else exported_count}")
+    print(f"    {output_format} Output       : {findings_file}")
     print(f"    Markdown Output   : {md_file}")
 
     print()
