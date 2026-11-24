@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import smtplib
 import subprocess
 import sys
 import tempfile
@@ -9,13 +10,20 @@ import unittest
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from rich.console import Console
 
 from email_audit import cli
+from email_audit.dns.dkim import assess_dkim
+from email_audit.dns.dmarc import assess_dmarc
+from email_audit.dns.mta_sts import assess_mta_sts, parse_mta_sts_policy
+from email_audit.dns.spf import assess_spf
+from email_audit.dns.tls_rpt import assess_tls_rpt
 from email_audit.output.console import print_assessment
 from email_audit.output.evidence import report_configuration_validation
+from email_audit.spoofing import spoof
 
 
 class CliTests(unittest.TestCase):
@@ -71,6 +79,62 @@ class CliTests(unittest.TestCase):
         self.assertIn("DNS lookup failed: timeout", output.getvalue())
         self.assertIn("TLS reporting configuration could not be determined.", output.getvalue())
         self.assertNotIn("Assessment:", output.getvalue())
+
+    def test_spf_fields_are_separate_and_explain_qualifiers(self):
+        record = "v=spf1 include:mail.example.test ip4:192.0.2.0/24 ~all"
+        output = io.StringIO()
+        with patch("email_audit.output.console.console", Console(file=output, width=120)):
+            print_assessment(assess_spf(record))
+        lines = output.getvalue().splitlines()
+        self.assertIn(record, output.getvalue())
+        self.assertTrue(any("v=spf1" in line and "SPF record version" in line for line in lines))
+        self.assertTrue(any("include:mail.example.test" in line and "referenced" in line for line in lines))
+        self.assertTrue(any("ip4:192.0.2.0/24" in line and "IPv4" in line for line in lines))
+        self.assertTrue(any("~all" in line and "soft failure" in line for line in lines))
+
+    def test_dkim_fields_keep_raw_split_record_and_key_observations(self):
+        record = '"v=DKIM1; k=rsa; p=abc" "def"'
+        output = io.StringIO()
+        with patch("email_audit.output.console.console", Console(file=output, width=120)):
+            print_assessment(assess_dkim("sample", record, True))
+        text = output.getvalue()
+        self.assertIn(record, text)
+        self.assertIn("DKIM record version", text)
+        self.assertIn("Public key algorithm", text)
+        self.assertIn("p=<public key>", text)
+        self.assertIn("Public key used to verify signatures", text)
+        self.assertIn("Selector extracted from supplied email: sample", text)
+        self.assertIn("DKIM RSA public key could not be decoded", text)
+
+    def test_other_records_explain_fields_and_keep_invalid_diagnostics(self):
+        results = [
+            assess_dmarc("v=DMARC1; p=none; rua=mailto:a@example.test; custom=x"),
+            assess_mta_sts('"v=STSv1; id=123"', parse_mta_sts_policy(
+                "version: STSv1\nmode: enforce\nmx: mail.example.test\nmax_age: 86400"
+            )),
+            assess_tls_rpt(["v=TLSRPTv1; rua=invalid"]),
+        ]
+        output = io.StringIO()
+        with patch("email_audit.output.console.console", Console(file=output, width=120)):
+            for result in results:
+                print_assessment(result)
+        text = output.getvalue()
+        for expected in (
+            "DMARC record version", "Monitor failures without requesting enforcement",
+            "Destination for aggregate reports", "Unrecognised or unsupported field",
+            "Policy identifier used to detect changes", "policy: mode=enforce",
+            "Authorised mail server", "TLS reporting record version",
+            "Destinations for email transport security reports", "missing or invalid reporting URI",
+        ):
+            self.assertIn(expected, text)
+
+    def test_unparseable_quoted_dkim_record_is_not_silently_discarded(self):
+        output = io.StringIO()
+        result = assess_dkim("sample", '"v=DKIM1; p=broken', True)
+        with patch("email_audit.output.console.console", Console(file=output, width=120)):
+            print_assessment(result)
+        self.assertIn('"v=DKIM1; p=broken', output.getvalue())
+        self.assertIn("Could not parse the quoted record into fields", output.getvalue())
 
     def test_sample_workflow_exports_findings_and_html(self):
         with contextlib.ExitStack() as cleanup:
@@ -189,6 +253,155 @@ class CliTests(unittest.TestCase):
         for label in ("SPF", "DKIM", "DMARC", "MTA-STS", "TLS-RPT", "DNS checks complete"):
             self.assertIn(label, terminal.getvalue())
         self.assertIn("5/5", terminal.getvalue())
+
+    def test_skipped_spoof_test_never_prompts_for_delivery_or_reports_a_result(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch("sys.argv", [
+                "email-audit", "example.test", "--spoof", "recipient@example.test"
+            ]))
+            stack.enter_context(patch.object(cli.Path, "mkdir"))
+            for name in (
+                "get_spf_record", "get_dmarc_record", "check_mta_sts",
+                "get_mta_sts_policy", "parse_mta_sts_policy", "assess_spf",
+                "assess_dkim_records", "assess_dmarc", "assess_mta_sts",
+                "print_info", "print_assessment", "build_recommendations",
+                "export_json", "export_html", "print_completion_summary", "report_spoof",
+            ):
+                stack.enter_context(patch.object(cli, name))
+            stack.enter_context(patch.object(cli, "check_dkim_selectors", return_value=[]))
+            stack.enter_context(patch.object(cli, "get_tls_rpt_records", return_value=([], None)))
+            stack.enter_context(patch.object(
+                cli, "perform_spoof_test", return_value={"assessment": "LOCAL SMTP RELAY NOT AVAILABLE"}
+            ))
+            findings = stack.enter_context(patch.object(cli, "build_findings", return_value=[]))
+            commentary = stack.enter_context(patch.object(cli, "build_commentary"))
+            prompt = stack.enter_context(patch("builtins.input"))
+            cli.main()
+        prompt.assert_not_called()
+        self.assertIsNone(findings.call_args.args[3])
+        self.assertIsNone(commentary.call_args.args[3])
+
+    def test_spoof_details_are_displayed_in_a_table(self):
+        output = io.StringIO()
+        result = {
+            "sender": "ceo@example.test", "recipient": "recipient@example.test",
+            "subject": "Controlled Spoofing Assessment", "assessment": "UNKNOWN",
+            "impact": "Test outcome unavailable.",
+        }
+        with patch.object(spoof, "console", Console(file=output, width=100)):
+            spoof.report_spoof(result)
+        text = output.getvalue()
+        for value in ("Sender", "ceo@example.test", "Recipient", "recipient@example.test",
+                      "Subject", "Controlled Spoofing Assessment"):
+            self.assertIn(value, text)
+
+    def test_delivery_prompt_only_follows_accepted_submission(self):
+        for assessment in ("MESSAGE SUBMITTED", "REJECTED BY SMTP RELAY"):
+            with self.subTest(assessment=assessment), contextlib.ExitStack() as stack:
+                stack.enter_context(patch("sys.argv", [
+                    "email-audit", "example.test", "--spoof", "recipient@example.test"
+                ]))
+                stack.enter_context(patch.object(cli.Path, "mkdir"))
+                for name in (
+                    "get_spf_record", "get_dmarc_record", "check_mta_sts",
+                    "get_mta_sts_policy", "parse_mta_sts_policy", "assess_spf",
+                    "assess_dkim_records", "assess_dmarc", "assess_mta_sts",
+                    "print_info", "print_assessment", "build_recommendations",
+                    "export_json", "export_html", "print_completion_summary", "report_spoof",
+                ):
+                    stack.enter_context(patch.object(cli, name))
+                stack.enter_context(patch.object(cli, "check_dkim_selectors", return_value=[]))
+                stack.enter_context(patch.object(cli, "get_tls_rpt_records", return_value=([], None)))
+                stack.enter_context(patch.object(
+                    cli, "perform_spoof_test", return_value={"assessment": assessment}
+                ))
+                findings = stack.enter_context(patch.object(cli, "build_findings", return_value=[]))
+                stack.enter_context(patch.object(cli, "build_commentary"))
+                prompt = stack.enter_context(patch("builtins.input", return_value="yes"))
+                cli.main()
+                self.assertEqual(prompt.call_count, int(assessment == "MESSAGE SUBMITTED"))
+                self.assertEqual(
+                    findings.call_args.args[3]["successful"], assessment == "MESSAGE SUBMITTED"
+                )
+
+
+class SpoofRelayTests(unittest.TestCase):
+    def test_relay_check_requires_an_smtp_greeting(self):
+        with patch.object(spoof.smtplib, "SMTP", side_effect=smtplib.SMTPServerDisconnected):
+            self.assertFalse(spoof.smtp_server_running())
+        with patch.object(spoof.smtplib, "SMTP") as smtp:
+            self.assertTrue(spoof.smtp_server_running())
+            smtp.assert_called_once_with("localhost", 25, timeout=3)
+
+    def test_available_relay_needs_no_start_prompt(self):
+        with patch.object(spoof, "smtp_server_running", return_value=True), \
+                patch("builtins.input") as prompt:
+            self.assertIsNone(spoof.ensure_local_smtp())
+        prompt.assert_not_called()
+
+    def test_declined_start_skips_sending(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(spoof, "smtp_server_running", return_value=False))
+            stack.enter_context(patch.object(spoof.sys.stdin, "isatty", return_value=True))
+            stack.enter_context(patch.object(spoof.sys, "platform", "linux"))
+            stack.enter_context(patch.object(spoof.os, "geteuid", return_value=0, create=True))
+            stack.enter_context(patch.object(spoof, "which", side_effect=lambda name: f"/usr/bin/{name}"))
+            stack.enter_context(patch("builtins.input", return_value="n"))
+            start = stack.enter_context(patch.object(spoof.subprocess, "run"))
+            send = stack.enter_context(patch.object(spoof, "run_command"))
+            result = spoof.perform_spoof_test("example.test", "recipient@example.test")
+        self.assertEqual(result["assessment"], "LOCAL SMTP RELAY NOT AVAILABLE")
+        self.assertIn("skipped", result["impact"])
+        start.assert_not_called()
+        send.assert_not_called()
+
+    def test_start_rechecks_relay_before_sending(self):
+        for responds in (True, False):
+            with self.subTest(responds=responds), contextlib.ExitStack() as stack:
+                stack.enter_context(patch.object(
+                    spoof, "smtp_server_running", side_effect=[False, responds]
+                ))
+                stack.enter_context(patch.object(spoof.sys.stdin, "isatty", return_value=True))
+                stack.enter_context(patch.object(spoof.sys, "platform", "linux"))
+                stack.enter_context(patch.object(spoof.os, "geteuid", return_value=1000, create=True))
+                stack.enter_context(patch.object(
+                    spoof, "which", side_effect=lambda name: f"/usr/bin/{name}"
+                ))
+                stack.enter_context(patch("builtins.input", return_value="yes"))
+                start = stack.enter_context(patch.object(
+                    spoof.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+                ))
+                send = stack.enter_context(patch.object(spoof, "run_command", return_value="queued as 1"))
+                result = spoof.perform_spoof_test("example.test", "recipient@example.test")
+                start.assert_called_once_with(
+                    ["/usr/bin/sudo", "/usr/bin/service", "postfix", "start"], check=False
+                )
+                if responds:
+                    self.assertEqual(result["assessment"], "MESSAGE SUBMITTED")
+                    self.assertIn("Subject: Controlled Spoofing Assessment", send.call_args.args[0])
+                else:
+                    self.assertIn("no SMTP service responded", result["impact"])
+                    send.assert_not_called()
+
+    def test_noninteractive_missing_relay_does_not_prompt(self):
+        with patch.object(spoof, "smtp_server_running", return_value=False), \
+                patch.object(spoof.sys.stdin, "isatty", return_value=False), \
+                patch("builtins.input") as prompt:
+            self.assertIn("Start a local SMTP relay", spoof.ensure_local_smtp())
+        prompt.assert_not_called()
+
+    def test_failed_service_start_is_reported(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(spoof, "smtp_server_running", return_value=False))
+            stack.enter_context(patch.object(spoof.sys.stdin, "isatty", return_value=True))
+            stack.enter_context(patch.object(spoof.sys, "platform", "linux"))
+            stack.enter_context(patch.object(spoof.os, "geteuid", return_value=0, create=True))
+            stack.enter_context(patch.object(spoof, "which", return_value="/usr/bin/service"))
+            stack.enter_context(patch("builtins.input", return_value="y"))
+            stack.enter_context(patch.object(
+                spoof.subprocess, "run", return_value=SimpleNamespace(returncode=1)
+            ))
+            self.assertIn("startup failed (exit code 1)", spoof.ensure_local_smtp())
 
 
 if __name__ == "__main__":

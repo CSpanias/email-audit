@@ -16,11 +16,11 @@ destinations. It accepts `mailto` and `https` destinations.
 v=TLSRPTv1; rua=mailto:tls-reports@example.com
 ```
 
-| Result | Finding | SureFormat |
-|---|---|---|
-| No version-one policy | `missing-tls-rpt` | `SC-6840` |
-| Malformed policy, duplicate policies or invalid destination | `invalid-tls-rpt` | `SC-6841` |
-| DNS lookup or decoding failure | Inconclusive; no missing or invalid finding | — |
+| Result | Finding |
+|---|---|
+| No version-one policy | `missing-tls-rpt` |
+| Malformed policy, duplicate policies or invalid destination | `invalid-tls-rpt` |
+| DNS lookup or decoding failure | Inconclusive; no missing or invalid finding |
 
 Unrelated TXT records and other TLS-RPT versions are not treated as version-one
 policies. Unknown, syntactically valid extension fields are ignored.

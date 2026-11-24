@@ -247,11 +247,15 @@ def main():
 
         report_spoof(spoof_result)
 
-        delivered = input(
-            "\n[?] Was the spoofed email successfully delivered? [y/N]: "
-        ).strip().lower()
-
-        spoof_result["successful"] = delivered == "y"
+        if spoof_result["assessment"] == "MESSAGE SUBMITTED":
+            delivered = input(
+                "\n[?] Was the spoofed email successfully delivered? [y/N]: "
+            ).strip().lower()
+            spoof_result["successful"] = delivered in {"y", "yes"}
+        elif spoof_result["assessment"] == "REJECTED BY SMTP RELAY":
+            spoof_result["successful"] = False
+        else:
+            spoof_result = None
 
     # -----------------------------------------------------------------------
     # Generate Findings

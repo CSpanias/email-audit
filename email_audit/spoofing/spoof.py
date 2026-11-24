@@ -5,9 +5,15 @@ Provides functionality for performing authorised email spoofing tests
 and validating how email security controls respond to spoofed messages.
 """
 
-import socket
+import os
+import smtplib
+import subprocess
+import sys
 
 from shutil import which
+
+from rich.table import Table
+from rich.text import Text
 
 from email_audit.utils import run_command
 from email_audit.output.console import (
@@ -22,19 +28,49 @@ from email_audit.output.console import (
 # ---------------------------------------------------------------------------
 def smtp_server_running():
     """
-    Determine whether a local SMTP relay is available.
-
-    Returns True if an SMTP service is reachable on localhost:25,
-    otherwise returns False.
+    Determine whether a local SMTP relay accepts connections on localhost:25.
     """
 
     try:
-        sock = socket.create_connection(("localhost", 25), timeout=3)
-        sock.close()
+        with smtplib.SMTP("localhost", 25, timeout=3):
+            pass
         return True
 
-    except Exception:
+    except (OSError, smtplib.SMTPException):
         return False
+
+
+def ensure_local_smtp():
+    """Offer to start Postfix when the local relay is unavailable."""
+    if smtp_server_running():
+        return None
+
+    unavailable = "No SMTP service was detected on localhost:25."
+    if not sys.stdin.isatty():
+        return f"{unavailable} Start a local SMTP relay and rerun the assessment."
+    service = which("service") if sys.platform.startswith("linux") else None
+    if not service:
+        return f"{unavailable} Start a local SMTP relay manually and rerun the assessment."
+    command = [service, "postfix", "start"]
+    if os.geteuid() != 0:
+        sudo = which("sudo")
+        if not sudo:
+            return f"{unavailable} sudo is unavailable; start Postfix manually and rerun."
+        command.insert(0, sudo)
+
+    print(f"\n[!] {unavailable}")
+    if input("[?] Start the local Postfix service now? [y/N]: ").strip().lower() not in {"y", "yes"}:
+        return "Local SMTP relay was not started; the spoofing assessment was skipped."
+
+    try:
+        completed = subprocess.run(command, check=False)
+    except OSError as exc:
+        return f"Could not start Postfix: {exc}. The spoofing assessment was skipped."
+    if completed.returncode != 0:
+        return f"Postfix startup failed (exit code {completed.returncode}); the spoofing assessment was skipped."
+    if not smtp_server_running():
+        return "Postfix started, but no SMTP service responded on localhost:25; the spoofing assessment was skipped."
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +87,7 @@ def perform_spoof_test(domain, recipient):
     """
 
     sender = f"ceo@{domain}"
-    subject = "Subject: Controlled Spoofing Assessment"
+    subject = "Controlled Spoofing Assessment"
     body = (
         "This email was generated as part of an authorised security assessment "
         f"to validate SPF, DKIM, and DMARC enforcement for the {domain} domain."
@@ -79,13 +115,11 @@ def perform_spoof_test(domain, recipient):
         return result
 
     # Check SMTP relay
-    if not smtp_server_running():
+    smtp_error = ensure_local_smtp()
+    if smtp_error:
 
         result["assessment"] = "LOCAL SMTP RELAY NOT AVAILABLE"
-        result["impact"] = (
-            "No SMTP service was detected on localhost:25. Start a local SMTP "
-            "relay (e.g. Postfix) before performing a spoofing assessment."
-        )
+        result["impact"] = smtp_error
 
         return result
 
@@ -93,7 +127,7 @@ def perform_spoof_test(domain, recipient):
         "swaks",
         "--to", recipient,
         "--from", sender,
-        "--header", subject,
+        "--header", f"Subject: {subject}",
         "--body", body,
         "--server", "localhost"
     ])
@@ -135,12 +169,13 @@ def report_spoof(result):
 
     print_section("SPOOFING TEST")
 
-    print("Test Details:")
-    print(f"Sender:     {result['sender']}")
-    print(f"Recipient:  {result['recipient']}")
-    print(f"Subject:    {result['subject']}")
-
-    print()
+    table = Table()
+    table.add_column("Field", style="cyan")
+    table.add_column("Details", overflow="fold")
+    for label, key in (("Sender", "sender"), ("Recipient", "recipient"), ("Subject", "subject")):
+        table.add_row(label, Text(result[key]))
+    console.print(table)
+    console.print()
 
     print("Assessment:")
     console.print(colour_assessment(result["assessment"]))

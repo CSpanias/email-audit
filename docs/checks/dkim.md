@@ -22,8 +22,8 @@ additional evidence. A published key alone does not demonstrate that
 messages are signed or that a signature passes validation.
 
 For a discovered RSA key, the public key is decoded and its modulus length is
-measured. A key below 2048 bits produces `weak-dkim-rsa-key`, mapped to
-SureFormat `SC-2187`. A 2048-bit or larger key does not produce that finding.
+measured. A key below 2048 bits produces `weak-dkim-rsa-key`. A 2048-bit or
+larger key does not produce that finding.
 Missing, revoked, malformed or non-RSA keys do not produce a weak RSA finding;
 their key-length assessment is inconclusive or not applicable.
 
