@@ -4,6 +4,9 @@ A Python-based tool designed to make email security reviews more efficient.
 
 Developed as an educational tool to accompany [Email Security Explained: SPF, DKIM, DMARC, and MTA-STS](https://mollysec.com/posts/email-security-explained/). 
 
+For installation, workflow details and output formats, see the
+[documentation](https://cspanias.github.io/email-audit/).
+
 It analyses common email security mechanisms and provides a structured assessment consisting of:
 
 ```text
@@ -28,19 +31,16 @@ email-audit -h
 uv tool upgrade email-audit
 ```
 
-### Clone Locally (Method 2):
+### Clone Locally (Method 2)
 
-> **Note**: Python 3 must be installed and available in your `PATH`.
+Python 3.10 or later and pip must be installed.
 
 ```bash
 # Clone the repository
 git clone https://github.com/CSpanias/email-audit /opt/email-audit
 
-# Make the script executable
-chmod +x /opt/email-audit/email_audit.py
-
-# Create a symbolic link
-sudo ln -s /opt/email-audit/email_audit.py /usr/local/bin/email-audit
+cd /opt/email-audit
+python -m pip install .
 
 # Verify installation
 email-audit -h
@@ -55,8 +55,10 @@ The tool follows the same assessment methodology typically used during an email 
 * SPF discovery and assessment
 * DMARC discovery and policy analysis
 * DKIM detection using common selectors
+* DKIM RSA key length assessment
 * MTA-STS detection and policy analysis
-* *Security posture scoring* (experimental)
+* TLS-RPT reporting policy assessment
+* Interactive progress for DNS checks
 
 ### 2. Email analysis
 
@@ -71,8 +73,8 @@ The tool follows the same assessment methodology typically used during an email 
 
 ### 4. Reporting
 
-* Markdown report generation
-* JSON findings export
+* Self-contained HTML report generation
+* JSON findings export or optional SureFormat XML
 * Rich console evidence tables
 
 ## Usage
@@ -87,9 +89,14 @@ email-audit <domain> --email <email_file>
 # Spoofing Test
 sudo service postfix start
 email-audit <domain> --spoof <recipient>
+
+# Export SureFormat XML instead of JSON
+email-audit <domain> --csacyber
 ```
 
 ## Example Output
+
+These excerpts illustrate the output format; results vary by domain.
 
 ```bash
 $ email-audit <domain> --email <domain>.eml --spoof mollysec@lab.com
@@ -165,7 +172,6 @@ Security Impact:
 Assessment:
   MISSING
 
-Overall Security Posture: MODERATE (6/10)
 ```
 
 ```text
@@ -212,10 +218,11 @@ Security Impact:
 
     Findings Exported : 1
     JSON Output       : <domain>.json
-    Markdown Output   : <domain>.md
+    HTML Output       : <domain>.html
 ```
 
-The Markdown file will include the Executive Summary, Technical Commentary, and Solution sections.
+The HTML report includes the executive summary, technical commentary,
+recommendations and findings. The following are illustrative excerpts:
 
 ```text
 ## Executive Summary
@@ -310,7 +317,7 @@ Following implementation, the effectiveness of the controls should be validated 
 
 ### Core
 
-* Python 3
+* Python 3.10 or later
 * dig
 
 ### Optional
@@ -319,9 +326,14 @@ Following implementation, the effectiveness of the controls should be validated 
 * [swaks](https://www.kali.org/tools/swaks/) (spoofing tests)
 * postfix (local SMTP relay)
 
+## Development
+
+```bash
+python -m pip install -e ".[docs]"
+python -m unittest discover -s tests
+python -m mkdocs build --strict
+```
+
 ## Roadmap
 
-* Implement DKIM key length check
-* TLS-RPT analysis
-* Enhanced scoring based on observed authentication results
 * Accept multiple domains and files

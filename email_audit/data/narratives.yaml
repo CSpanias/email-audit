@@ -1,0 +1,230 @@
+additional_checks:
+  weak_dkim: "The DKIM selector {selector} uses a {bits}-bit RSA public key, below the recommended minimum of 2048 bits."
+  tls_rpt_heading: "### SMTP TLS Reporting (TLS-RPT)"
+  tls_rpt_present: "A TLS-RPT policy with reporting destinations was identified. Publication does not establish that reports are received or reviewed."
+  tls_rpt_missing: "No TLS-RPT policy was identified. The domain owner may not receive reports about SMTP TLS delivery failures."
+  tls_rpt_invalid: "A TLS-RPT policy was identified, but its reporting configuration is invalid: {reason}."
+  tls_rpt_unknown: "The TLS-RPT policy could not be assessed because the DNS lookup or response could not be processed."
+  weak_dkim_recommendation: "Replace the RSA key for DKIM selector {selector} with a key of at least 2048 bits and coordinate key rotation with the email provider."
+  tls_rpt_missing_recommendation: "Publish a TLS-RPT DNS record with a valid reporting destination and review the resulting reports."
+  tls_rpt_invalid_recommendation: "Correct the TLS-RPT DNS record and verify its version and reporting destination."
+commentary:
+  build_commentary:
+    a_review_of_spf_dkim_dmarc_and: A review of SPF, DKIM, DMARC and MTA-STS controls was performed against
+      the {domain} domain to assess the implementation of email authentication and transport security
+      controls.
+  _build_summary_table:
+    controls_configuration_summary: '### Controls Configuration Summary'
+  _build_spf_commentary:
+    sender_policy_framework_spf: '### Sender Policy Framework (SPF)'
+    the_domain_implemented_spf_using_a_restrictive: The domain implemented SPF using a restrictive hard-fail
+      enforcement policy (-all), helping receiving mail systems identify authorised sending infrastructure
+      and reject unauthorised sources.
+    the_domain_implemented_spf_and_identified_authorised: The domain implemented SPF and identified authorised
+      mail infrastructure. A soft-fail policy (~all) was observed. Whilst less restrictive than a hard-fail
+      policy, SPF should still provide value when combined with DMARC enforcement.
+    the_following_authorised_sending_services_were_identified: 'The following authorised sending services
+      were identified:'
+    the_following_authorised_ip_addresses_were_identified: 'The following authorised IP addresses were
+      identified:'
+    spf_temperror_observed: Authentication results extracted from the
+      supplied email sample indicated an SPF temporary processing error (temperror).
+    this_suggests_that_receiving_mail_systems_were: This suggests that receiving mail systems were unable
+      to successfully complete SPF evaluation. A controlled spoofing assessment further demonstrated that
+      a spoofed email claiming to originate from the target domain could be successfully delivered, indicating
+      that the intended anti-spoofing protections may not be operating effectively in practice.
+    the_spf_record_utilised_the_permissive_all: The SPF record utilised the permissive '+all' mechanism,
+      effectively authorising any host on the Internet to send email on behalf of the domain. This significantly
+      reduces the effectiveness of SPF as an anti-spoofing control and may increase exposure to email
+      impersonation attacks.
+    spf_failure_observed: Authentication results extracted from
+      the supplied email sample indicated that SPF validation failed.
+    this_suggests_that_the_observed_email_message: This suggests that the observed email message was not
+      authorised by the published SPF policy.
+    no_spf_record_was_identified_for_the: No SPF record was identified for the domain.
+    as_a_result_receiving_mail_systems_may: As a result, receiving mail systems may be unable to reliably
+      determine which hosts are authorised to send email on behalf of the domain.
+  _build_dkim_commentary:
+    domainkeys_identified_mail_dkim: '### DomainKeys Identified Mail (DKIM)'
+    dkim_pass_observed: DKIM support was identified through published DNS
+      records and successful DKIM validation was observed within the supplied email sample.
+    this_demonstrates_that_outbound_email_messages_were: This demonstrates that outbound email messages
+      were cryptographically signed and successfully validated by receiving mail systems.
+    dkim_key_discovered: DKIM support was identified through published
+      DNS records and a corresponding public key was successfully retrieved. This enables receiving mail
+      systems to validate message authenticity and integrity.
+    dkim_support_could_not_be_confirmed_through: 'DKIM support could not be confirmed through DNS and
+      no suitable selector could be identified automatically. '
+    as_a_result_assurance_regarding_the_authenticity: As a result, assurance regarding the authenticity
+      and integrity of outbound email communications may be reduced.
+  _build_dmarc_commentary:
+    domain_based_message_authentication_reporting_and_conformance: '### Domain-based Message Authentication,
+      Reporting and Conformance (DMARC)'
+    the_dmarc_configuration_was_observed_to: 'The DMARC configuration was observed to:'
+    reject_messages_that_fail_authentication_checks: '- Reject messages that fail authentication checks.'
+    treat_messages_that_fail_authentication_checks_as: '- Treat messages that fail authentication checks
+      as suspicious.'
+    apply_the_policy_to_value_1_of: '- Apply the policy to {value_1}% of received messages.'
+    use_value_1_dkim_alignment: '- Use {value_1} DKIM alignment.'
+    use_value_1_spf_alignment: '- Use {value_1} SPF alignment.'
+    dmarc_aggregate_reports_were_configured_to_be: 'DMARC aggregate reports were configured to be sent
+      to:'
+    this_configuration_helps_reduce_the_risk_of: This configuration helps reduce the risk of domain spoofing
+      and provides greater confidence in the authenticity of messages originating from the domain.
+    monitor_authentication_failures_without_enforcing_remediation_actions: '- Monitor authentication failures
+      without enforcing remediation actions.'
+    whilst_less_restrictive_than_a_reject_policy: Whilst less restrictive than a reject policy, this configuration
+      still provides meaningful protection against spoofing and may help reduce the likelihood of fraudulent
+      messages reaching end users.
+    no_dmarc_policy_was_identified_for_the: No DMARC policy was identified for the domain.
+    as_a_result_receiving_organisations_are_not: As a result, receiving organisations are not provided
+      with guidance on how to handle messages that fail SPF or DKIM validation, reducing the effectiveness
+      of the domain's email authentication controls.
+    although_this_configuration_provides_visibility_through_reporting: Although this configuration provides
+      visibility through reporting, it does not provide meaningful protection against domain spoofing
+      or email impersonation attacks.
+  _build_mta_sts_commentary:
+    mail_transfer_agent_strict_transport_security_mta: '### Mail Transfer Agent Strict Transport Security
+      (MTA-STS)'
+    the_mta_sts_configuration_was_observed_to: 'The MTA-STS configuration was observed to:'
+    operate_in_enforcement_mode: '- Operate in enforcement mode.'
+    operate_in_testing_mode: '- Operate in testing mode.'
+    this_configuration_helps_reduce_the_risk_of: This configuration helps reduce the risk of SMTP downgrade
+      and adversary-in-the-middle attacks by ensuring email is delivered over trusted encrypted channels.
+    cache_policy_information_for_value_1_seconds: '- Cache policy information for {value_1} seconds.'
+    the_following_authorised_mail_servers_were_identified: 'The following authorised mail servers were
+      identified:'
+    although_not_fully_enforced_this_demonstrates_an: Although not fully enforced, this demonstrates an
+      intention to deploy stronger email transport security controls and provides visibility of potential
+      TLS delivery issues.
+    operate_in_a_non_enforcing_mode: '- Operate in a non-enforcing mode.'
+    as_a_result_email_delivery_may_continue: As a result, email delivery may continue to rely on opportunistic
+      TLS without providing meaningful protection against SMTP downgrade attacks.
+    an_mta_sts_dns_record_was_also: An MTA-STS DNS record was also identified; however, the associated
+      policy could not be successfully retrieved or validated. Consequently, it was not possible to confirm
+      that MTA-STS was operating as intended.
+    no_mta_sts_policy_was_identified_for: No MTA-STS policy was identified for the domain.
+    as_a_result_email_delivery_may_rely: As a result, email delivery may rely solely on opportunistic
+      TLS, reducing assurance that messages are delivered over trusted encrypted channels and increasing
+      exposure to SMTP downgrade attacks.
+  _build_spoofing_commentary:
+    controlled_spoofing_assessment: '### Controlled Spoofing Assessment'
+    a_controlled_spoofing_assessment_identified_that_an: A controlled spoofing assessment identified that
+      an email claiming to originate from the target domain could be successfully generated and delivered
+      during testing.
+    although_email_authentication_controls_were_present_testing: Although email authentication controls
+      were present, testing demonstrated that these controls did not effectively prevent delivery of a
+      spoofed message.
+    testing_did_not_identify_evidence_that_a: Testing did not identify evidence that a spoofed email could
+      be successfully delivered.
+executive_summary:
+  build_executive_summary:
+    an_email_security_review_was_performed_against: An email security review was performed against the
+      {domain} domain to assess the implementation and effectiveness of industry-standard email authentication
+      and transport security controls.
+    spf_dkim_and_dmarc_controls_were_identified: 'SPF, DKIM and DMARC controls were identified during
+      the assessment. '
+    the_assessment_identified_weaknesses_affecting_the_domain: The assessment identified weaknesses affecting
+      the domain's ability to verify the authenticity of email communications, increasing exposure to
+      spoofing and impersonation attacks.
+    successful_validation_of_these_controls_was_observed: 'Successful validation of these controls was
+      observed in the supplied email sample, providing assurance that they were functioning as intended. '
+    despite_the_presence_of_email_authentication_controls: Despite the presence of email authentication
+      controls, testing identified that emails claiming to originate from the {domain} domain could be
+      successfully spoofed. This increases the risk of phishing, impersonation and business email compromise
+      attacks and indicates that the implemented protections may not be operating effectively in practice.
+    the_assessment_identified_significant_weaknesses_affecting_the: The assessment identified significant
+      weaknesses affecting the domain's email security posture. SPF, DKIM, DMARC and MTA-STS controls
+      were not identified, limiting the ability of receiving organisations to verify the authenticity
+      of email communications and increasing exposure to spoofing and impersonation attacks.
+    mature_with_transport_security: Overall, the domain demonstrated a mature email security
+      posture. Effective authentication and transport security controls were identified and aligned with
+      recognised industry practices, significantly reducing exposure to spoofing, impersonation and email-based
+      threats.
+    collectively_these_controls_align_with_recognised_industry: Collectively, these controls align with
+      recognised industry practices and significantly reduce exposure to domain spoofing, impersonation
+      attacks and fraudulent email activity.
+    validation_of_one_or_more_email_authentication: Validation of one or more email authentication controls
+      was unsuccessful, indicating that the implemented controls may not be operating as intended and
+      reducing confidence in the effectiveness of the domain's anti-spoofing protections.
+    email_authentication_controls_were_identified_however_the: Email authentication controls were identified;
+      however, the supplied email sample did not contain sufficient authentication results to validate
+      their operation.
+    mta_sts_missing: The assessment also identified an opportunity to
+      further strengthen email security. No MTA-STS policy was identified. Whilst this does not affect
+      the effectiveness of email authentication controls, it reduces assurance that email communications
+      are consistently protected against downgrade or interception risks during transit between mail systems.
+    mature_without_transport_security: Overall, the domain demonstrated a mature email
+      security posture. Effective authentication controls were implemented and observed to be functioning
+      correctly, significantly reducing exposure to spoofing and impersonation attacks. Addressing the
+      remaining transport-security weakness would further improve assurance that email communications
+      remain secure throughout delivery and strengthen resilience against email-based threats.
+    specifically_spf_evaluation_resulted_in_a_temporary: ' Specifically, SPF evaluation resulted in a
+      temporary processing error, preventing successful validation of the configured SPF policy.'
+    mta_sts_unconfirmed: The assessment also identified an opportunity
+      to further strengthen email security. An MTA-STS DNS record was identified; however, the associated
+      policy could not be validated. Consequently, it was not possible to confirm that the control was
+      operating as intended.
+    the_assessment_also_identified_effective_email_transport: The assessment also identified effective
+      email transport security controls through the implementation of MTA-STS. This provides additional
+      assurance that email communications remain protected whilst in transit between mail systems.
+    authentication_failed_spoof_delivered: Overall, the domain demonstrated a generally mature
+      email security posture. Authentication controls were identified; however, validation was not fully
+      successful and a controlled spoofing assessment demonstrated that emails claiming to originate from
+      the domain could be successfully spoofed. These observations reduce assurance that the implemented
+      controls are operating as intended.
+    authentication_failed: Overall, the domain demonstrated a generally
+      mature email security posture. Authentication controls were identified; however, one or more validation
+      checks were unsuccessful, reducing assurance that the controls are operating as intended.
+    overall_the_domain_demonstrated_a_generally_effective: Overall, the domain demonstrated a generally
+      effective email security posture; however, opportunities remain to further reduce exposure to spoofing,
+      impersonation and other email-based threats.
+    overall_the_domain_demonstrated_a_weak_email: Overall, the domain demonstrated a weak email security
+      posture. The absence of key authentication and transport security controls increases the likelihood
+      of email spoofing, impersonation attacks and loss of trust in email communications originating from
+      the domain.
+remediation:
+  build_recommendations:
+    the_identified_weaknesses_should_be_addressed_to: 'The identified weaknesses should be addressed to
+      further strengthen the domain''s email security posture:
+
+
+      '
+    follow_up_after_list: '
+
+      Following implementation, the effectiveness of the controls should be validated through periodic
+      reviews and testing to ensure they continue to operate as intended.'
+    the_assessment_identified_the_absence_of_spf: The assessment identified the absence of SPF, DKIM,
+      DMARC and MTA-STS controls. The organisation should implement a baseline email security framework
+      consisting of these mechanisms to improve protection against spoofing, impersonation and insecure
+      email transport.
+    follow_up_after_paragraph: '
+
+
+      Following implementation, the effectiveness of the controls should be validated through periodic
+      reviews and testing to ensure they continue to operate as intended.'
+    maintain_the_current_email_authentication_and_transport: Maintain the current email authentication
+      and transport security controls. Periodic reviews should be conducted to ensure SPF, DKIM, DMARC
+      and MTA-STS configurations remain aligned with business requirements and continue to operate effectively.
+    publish_an_spf_record_to_explicitly_define: Publish an SPF record to explicitly define authorised
+      mail sending infrastructure.
+    configure_dkim_signing_and_ensure_the_associated: Configure DKIM signing and ensure the associated
+      public key is published and publicly accessible.
+    implement_dmarc_with_an_appropriate_reporting_and: Implement DMARC with an appropriate reporting and
+      enforcement policy to improve protection against spoofing and impersonation attacks.
+    deploy_mta_sts_to_strengthen_smtp_transport: Deploy MTA-STS to strengthen SMTP transport security
+      and reduce the risk of downgrade attacks.
+    replace_the_all_spf_mechanism_with_a: Replace the '+all' SPF mechanism with a restrictive policy to
+      prevent unauthorised systems from sending email on behalf of the domain.
+    review_the_published_mta_sts_configuration_and: Review the published MTA-STS configuration and ensure
+      the policy can be successfully retrieved and validated by external systems.
+    investigate_the_cause_of_spf_processing_failures: Investigate the cause of SPF processing failures
+      and review the published SPF record for excessive complexity, DNS lookup limits, nested include
+      mechanisms or DNS resolution issues.
+    validate_that_the_spf_policy_can_be: Validate that the SPF policy can be successfully processed by
+      receiving mail systems and that the effective number of DNS lookups remains within RFC limitations.
+    investigate_the_conditions_that_allowed_successful_domain: Investigate the conditions that allowed
+      successful domain spoofing during testing and identify any weaknesses affecting the effectiveness
+      of the implemented email authentication controls.
+    review_spf_dkim_and_dmarc_configurations_and: Review SPF, DKIM and DMARC configurations and validate
+      that email authentication controls operate as intended under real-world conditions.

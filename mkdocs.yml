@@ -1,0 +1,50 @@
+site_name: Email Audit
+site_description: Email authentication and transport security assessment toolkit.
+site_url: https://cspanias.github.io/email-audit/
+repo_name: CSpanias/email-audit
+repo_url: https://github.com/CSpanias/email-audit
+strict: true
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Overview: index.md
+  - Installation: installation.md
+  - Workflow and output: workflow.md
+  - Checks:
+      - Overview: checks/index.md
+      - SPF: checks/spf.md
+      - DKIM: checks/dkim.md
+      - DMARC: checks/dmarc.md
+      - MTA-STS: checks/mta-sts.md
+      - TLS-RPT: checks/tls-rpt.md
+  - Knowledge base:
+      - DNS and email basics: knowledge-base/dns-and-email.md

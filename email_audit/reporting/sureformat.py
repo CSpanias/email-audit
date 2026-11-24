@@ -2,17 +2,7 @@
 
 import xml.etree.ElementTree as ET
 
-FINDING_MAP = {
-    "email-audit": "SC-2157",
-    "missing-spf": "SC-2090",
-    "missing-dmarc": "SC-2166",
-    "missing-dkim": "SC-2165",
-    "missing-mta-sts": "SC-6842",
-    "invalid-mta-sts": "SC-6842",
-    "permissive-spf": "SC-2183",
-    "spf-processing-failure": "SC-2089",
-    "email-spoofing-possible": "SC-3349",
-}
+from email_audit.reporting.definitions import load_definitions
 
 
 def export_sureformat(domain, findings):
@@ -24,11 +14,13 @@ def export_sureformat(domain, findings):
     vulnerabilities = ET.SubElement(service, "vulnerabilities")
 
     exported_count = 0
+    definitions = load_definitions("findings")
     for finding in findings:
-        vulnerability_id = FINDING_MAP.get(finding["id"])
-        if not vulnerability_id:
+        definition = definitions.get(finding["id"])
+        if definition is None:
             print(f"[!] No SureFormat mapping found for finding: {finding['id']}")
             continue
+        vulnerability_id = definition["sureformat_id"]
         vulnerability = ET.SubElement(vulnerabilities, "vulnerability", id=vulnerability_id)
         ET.SubElement(vulnerability, "information").text = finding["description"]
         exported_count += 1

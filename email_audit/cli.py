@@ -4,6 +4,10 @@ Command-line interface for Email-Audit.
 
 import argparse
 import os
+from textwrap import dedent
+
+from rich_argparse import RawDescriptionRichHelpFormatter
+from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn
 
 from email_audit.dns.spf import (
     assess_spf,
@@ -11,8 +15,9 @@ from email_audit.dns.spf import (
 )
 
 from email_audit.dns.dkim import (
-    assess_dkim,
+    assess_dkim_records,
     check_dkim_dns,
+    check_dkim_selectors,
 )
 
 from email_audit.dns.dmarc import (
@@ -26,6 +31,8 @@ from email_audit.dns.mta_sts import (
     get_mta_sts_policy,
     parse_mta_sts_policy,
 )
+
+from email_audit.dns.tls_rpt import assess_tls_rpt, get_tls_rpt_records
 
 from email_audit.email.eml import (
     parse_eml_file,
@@ -44,9 +51,7 @@ from email_audit.reporting.findings import (
     export_json,
 )
 
-from email_audit.reporting.markdown import (
-    export_markdown,
-)
+from email_audit.reporting.html import export_html
 
 from email_audit.reporting.sureformat import export_sureformat
 
@@ -55,8 +60,9 @@ from email_audit.reporting.remediation import (
 )
 
 from email_audit.output.console import (
+    console,
+    print_info,
     print_assessment,
-    print_posture,
     print_section,
     print_completion_summary,
 )
@@ -78,7 +84,15 @@ def parse_arguments():
     """
 
     parser = argparse.ArgumentParser(
-        description="Email security assessment tool"
+        description="Assess email authentication and transport security controls.",
+        formatter_class=RawDescriptionRichHelpFormatter,
+        epilog=dedent("""\
+            Examples:
+              email-audit example.com
+              email-audit example.com --email sample.eml
+              email-audit example.com --spoof recipient@example.com
+              email-audit example.com --csacyber
+        """),
     )
 
     parser.add_argument(
@@ -96,8 +110,8 @@ def parse_arguments():
         "--spoof",
         metavar="EMAIL",
         help=(
-            "Recipient address for spoofing test "
-            "(default ceo@<domain>)"
+            "Recipient address for a controlled spoofing test "
+            "(sender: ceo@<domain>)"
         )
     )
 
@@ -110,7 +124,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def process_email_sample(domain, email_file, results):
+def process_email_sample(domain, email_file, results, dkim_records):
     """
     Parse a supplied email sample and update assessment results.
     """
@@ -134,11 +148,8 @@ def process_email_sample(domain, email_file, results):
                 )
             )
 
-            results[1] = assess_dkim(
-                dkim_selector,
-                dkim_record,
-                dkim_found,
-                auth_results,
+            results[1] = assess_dkim_records(
+                dkim_records, auth_results, (dkim_selector, dkim_record, dkim_found)
             )
 
         return auth_results
@@ -162,46 +173,43 @@ def main():
 
     args = parse_arguments()
 
-    print(
-        f"\n[*] Retrieving DNS records and analysing email "
-        f"controls for the {args.domain} domain...\n"
+    print_info(
+        f"Retrieving DNS records and analysing email controls for the {args.domain} domain..."
     )
 
     # -----------------------------------------------------------------------
     # DNS Retrieval
     # -----------------------------------------------------------------------
-    spf_record = get_spf_record(args.domain)
-
-    dkim_selector, dkim_record, dkim_found = (
-        check_dkim_dns(args.domain)
-    )
-
-    dmarc_record = get_dmarc_record(args.domain)
-
-    mta_record = check_mta_sts(args.domain)
-
-    mta_policy_raw = get_mta_sts_policy(args.domain)
-
-    mta_policy = parse_mta_sts_policy(
-        mta_policy_raw
-    )
+    with Progress(
+        TextColumn("{task.description}"), BarColumn(), MofNCompleteColumn(),
+        TimeElapsedColumn(), console=console, transient=True, disable=not console.is_terminal,
+    ) as progress:
+        task = progress.add_task("Checking SPF", total=5)
+        spf_record = get_spf_record(args.domain)
+        progress.update(task, advance=1, description="Checking DKIM", refresh=True)
+        dkim_records = check_dkim_selectors(args.domain)
+        progress.update(task, advance=1, description="Checking DMARC", refresh=True)
+        dmarc_record = get_dmarc_record(args.domain)
+        progress.update(task, advance=1, description="Checking MTA-STS", refresh=True)
+        mta_record = check_mta_sts(args.domain)
+        mta_policy_raw = get_mta_sts_policy(args.domain)
+        mta_policy = parse_mta_sts_policy(mta_policy_raw)
+        progress.update(task, advance=1, description="Checking TLS-RPT", refresh=True)
+        tls_rpt_records, tls_rpt_error = get_tls_rpt_records(args.domain)
+        progress.update(task, advance=1, description="DNS checks complete", refresh=True)
 
     # -----------------------------------------------------------------------
     # Initial Assessment
     # -----------------------------------------------------------------------
     results = [
         assess_spf(spf_record),
-        assess_dkim(
-            dkim_selector,
-            dkim_record,
-            dkim_found,
-            auth_results,
-        ),
+        assess_dkim_records(dkim_records, auth_results),
         assess_dmarc(dmarc_record),
         assess_mta_sts(
             mta_record,
             mta_policy,
         ),
+        assess_tls_rpt(tls_rpt_records, tls_rpt_error),
     ]
 
     # --------------------------------------------------------------------------
@@ -212,6 +220,7 @@ def main():
             args.domain,
             args.email,
             results,
+            dkim_records,
         )
 
     # --------------------------------------------------------------------------
@@ -219,8 +228,6 @@ def main():
     # --------------------------------------------------------------------------
     for result in results:
         print_assessment(result)
-
-    print_posture(results)
 
     if auth_results:
         print_section("SCREENSHOT EVIDENCE")
@@ -276,12 +283,14 @@ def main():
         findings_file = export_json(args.domain, findings)
         exported_count = len(findings)
 
-    md_file = export_markdown(
+    html_file = export_html(
         args.domain,
         commentary,
         recommendations,
         results,
+        findings,
         auth_results,
+        spoof_result,
     )
 
     # --------------------------------------------------------------------------
@@ -290,7 +299,7 @@ def main():
     print_completion_summary(
         findings,
         findings_file,
-        md_file,
+        html_file,
         output_format="XML" if args.csacyber else "JSON",
         exported_count=exported_count,
     )

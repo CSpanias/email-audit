@@ -7,10 +7,16 @@ including control-specific observations and supporting evidence.
 
 
 from email_audit.constants import (
-    CONTROL_DEFINITIONS,
     DMARC_MAP,
     MTA_MAP,
 )
+
+from email_audit.dns.dkim import weak_dkim_keys
+from email_audit.reporting.definitions import load_definitions
+
+TEXT = load_definitions("narratives")['commentary']
+ADDITIONAL = load_definitions("narratives")["additional_checks"]
+CONTROL_DEFINITIONS = load_definitions("reference")["controls"]
 
 
 def build_commentary(domain, results, auth_results=None, spoof_result=None):
@@ -26,31 +32,46 @@ def build_commentary(domain, results, auth_results=None, spoof_result=None):
     text = []
 
     text.append(
-            "A review of SPF, DKIM, DMARC and MTA-STS controls was performed "
-            f"against the {domain} domain to assess the implementation of email "
-            "authentication and transport security controls."
+            TEXT['build_commentary']['a_review_of_spf_dkim_dmarc_and'].format(domain=domain)
         )
     text.append("")
 
-    _build_summary_table(text, spf, dkim, dmarc, mta)
+    tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
+    _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt)
     _build_spf_commentary(text, spf, auth_results)
     _build_dkim_commentary(text, dkim, auth_results)
     _build_dmarc_commentary(text, dmarc)
     _build_mta_sts_commentary(text, mta)
+    _build_additional_commentary(text, results)
     _build_spoofing_commentary(text, spoof_result)
 
     return "\n".join(text)
 
 
+def _build_additional_commentary(text, results):
+    tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
+    if tls_rpt is None:
+        return
+    status = tls_rpt["assessment"].lower()
+    text.extend([
+        ADDITIONAL["tls_rpt_heading"], "",
+        CONTROL_DEFINITIONS["TLS-RPT"], "",
+        ADDITIONAL[f"tls_rpt_{status}"].format(
+            reason=tls_rpt["breakdown"][0] if tls_rpt["breakdown"] else ""
+        ),
+        "",
+    ])
+
+
 # ---------------------------------------------------------------------------
 # Controls Configuration Summary
 # ---------------------------------------------------------------------------
-def _build_summary_table(text, spf, dkim, dmarc, mta):
+def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
     """
     Build the controls configuration summary table.
     """
     
-    text.append("### Controls Configuration Summary")
+    text.append(TEXT['_build_summary_table']['controls_configuration_summary'])
     text.append("")
 
     # SPF value
@@ -86,6 +107,8 @@ def _build_summary_table(text, spf, dkim, dmarc, mta):
     text.append(f"| DKIM    | {dkim_config}  |")
     text.append(f"| DMARC   | {dmarc_config} |")
     text.append(f"| MTA-STS | {mta_config}   |")
+    if tls_rpt is not None:
+        text.append(f"| TLS-RPT | {tls_rpt['assessment']} |")
 
     text.append("")
 
@@ -98,7 +121,7 @@ def _build_spf_commentary(text, spf, auth_results):
     Build the SPF technical commentary section.
     """
 
-    text.append("### Sender Policy Framework (SPF)")
+    text.append(TEXT['_build_spf_commentary']['sender_policy_framework_spf'])
     text.append("")
 
     text.append(CONTROL_DEFINITIONS["SPF"])
@@ -107,39 +130,27 @@ def _build_spf_commentary(text, spf, auth_results):
     if spf["assessment"] == "SECURE":
 
         text.append(
-            "The domain implemented SPF using a restrictive hard-fail "
-            "enforcement policy (-all), helping receiving mail systems "
-            "identify authorised sending infrastructure and reject "
-            "unauthorised sources."
+            TEXT['_build_spf_commentary']['the_domain_implemented_spf_using_a_restrictive']
         )
 
     elif spf["assessment"] == "ACCEPTABLE":
 
         text.append(
-            "The domain implemented SPF and identified authorised mail "
-            "infrastructure. A soft-fail policy (~all) was observed. Whilst "
-            "less restrictive than a hard-fail policy, SPF should still "
-            "provide value when combined with DMARC enforcement."
+            TEXT['_build_spf_commentary']['the_domain_implemented_spf_and_identified_authorised']
         )
 
     elif spf["assessment"] == "INSECURE":
 
         text.append(
-            "The SPF record utilised the permissive '+all' mechanism, "
-            "effectively authorising any host on the Internet to send email on "
-            "behalf of the domain. This significantly reduces the "
-            "effectiveness of SPF as an anti-spoofing control and may increase "
-            "exposure to email impersonation attacks."
+            TEXT['_build_spf_commentary']['the_spf_record_utilised_the_permissive_all']
         )
 
     elif spf["assessment"] == "MISSING":
 
-        text.append("No SPF record was identified for the domain.")
+        text.append(TEXT['_build_spf_commentary']['no_spf_record_was_identified_for_the'])
         text.append("")
         text.append(
-            "As a result, receiving mail systems may be unable to reliably "
-            "determine which hosts are authorised to send email on behalf of "
-            "the domain."
+            TEXT['_build_spf_commentary']['as_a_result_receiving_mail_systems_may']
         )
 
     if spf["assessment"] in ["SECURE", "ACCEPTABLE"]:
@@ -162,7 +173,7 @@ def _build_spf_commentary(text, spf, auth_results):
 
             text.append("")
             text.append(
-                "The following authorised sending services were identified:"
+                TEXT['_build_spf_commentary']['the_following_authorised_sending_services_were_identified']
             )
             text.append("")
 
@@ -173,7 +184,7 @@ def _build_spf_commentary(text, spf, auth_results):
 
             text.append("")
             text.append(
-                "The following authorised IP addresses were identified:"
+                TEXT['_build_spf_commentary']['the_following_authorised_ip_addresses_were_identified']
             )
             text.append("")
 
@@ -189,21 +200,13 @@ def _build_spf_commentary(text, spf, auth_results):
         if spf_result == "temperror":
 
             text.append(
-                "Authentication results extracted from the supplied "
-                "email sample indicated an SPF temporary processing "
-                "error (temperror)."
+                TEXT['_build_spf_commentary']['spf_temperror_observed']
             )
 
             text.append("")
 
             text.append(
-                "This suggests that receiving mail systems were unable "
-                "to successfully complete SPF evaluation. A controlled "
-                "spoofing assessment further demonstrated that a spoofed "
-                "email claiming to originate from the target domain could "
-                "be successfully delivered, indicating that the intended "
-                "anti-spoofing protections may not be operating effectively "
-                "in practice."
+                TEXT['_build_spf_commentary']['this_suggests_that_receiving_mail_systems_were']
             )
 
             text.append("")
@@ -211,15 +214,13 @@ def _build_spf_commentary(text, spf, auth_results):
         elif spf_result == "fail":
 
             text.append(
-                "Authentication results extracted from the supplied "
-                "email sample indicated that SPF validation failed."
+                TEXT['_build_spf_commentary']['spf_failure_observed']
             )
 
             text.append("")
 
             text.append(
-                "This suggests that the observed email message was not "
-                "authorised by the published SPF policy."
+                TEXT['_build_spf_commentary']['this_suggests_that_the_observed_email_message']
             )
 
             text.append("")
@@ -236,7 +237,7 @@ def _build_dkim_commentary(text, dkim, auth_results):
     Build the DKIM technical commentary section.
     """
 
-    text.append("### DomainKeys Identified Mail (DKIM)")
+    text.append(TEXT['_build_dkim_commentary']['domainkeys_identified_mail_dkim'])
     text.append("")
 
     text.append(CONTROL_DEFINITIONS["DKIM"])
@@ -247,40 +248,36 @@ def _build_dkim_commentary(text, dkim, auth_results):
         if auth_results and auth_results.get("dkim") == "pass":
 
             text.append(
-                "DKIM support was identified through published DNS records "
-                "and successful DKIM validation was observed within the "
-                "supplied email sample."
+                TEXT['_build_dkim_commentary']['dkim_pass_observed']
             )
             text.append("")
 
             text.append(
-                "This demonstrates that outbound email messages were "
-                "cryptographically signed and successfully validated by "
-                "receiving mail systems."
+                TEXT['_build_dkim_commentary']['this_demonstrates_that_outbound_email_messages_were']
             )
 
         else:
 
             text.append(
-                "DKIM support was identified through published DNS records "
-                "and a corresponding public key was successfully retrieved. "
-                "This enables receiving mail systems to validate message "
-                "authenticity and integrity."
+                TEXT['_build_dkim_commentary']['dkim_key_discovered']
             )
 
     elif dkim["assessment"] == "UNKNOWN":
 
         text.append(
-            "DKIM support could not be confirmed through DNS and no suitable "
-            "selector could be identified automatically. "
+            TEXT['_build_dkim_commentary']['dkim_support_could_not_be_confirmed_through']
         )
         text.append("")
 
         text.append(
-            "As a result, assurance regarding the authenticity and integrity "
-            "of outbound email communications may be reduced."
+            TEXT['_build_dkim_commentary']['as_a_result_assurance_regarding_the_authenticity']
         )
 
+    for key in weak_dkim_keys(dkim):
+        text.extend([
+            "",
+            ADDITIONAL["weak_dkim"].format(selector=key["selector"], bits=key["key_bits"]),
+        ])
     text.append("")
 
 
@@ -293,8 +290,7 @@ def _build_dmarc_commentary(text, dmarc):
     """
 
     text.append(
-        "### Domain-based Message Authentication, Reporting and "
-        "Conformance (DMARC)"
+        TEXT['_build_dmarc_commentary']['domain_based_message_authentication_reporting_and_conformance']
     )
     text.append("")
 
@@ -305,64 +301,58 @@ def _build_dmarc_commentary(text, dmarc):
 
     if dmarc["assessment"] == "SECURE":
 
-        text.append("The DMARC configuration was observed to:")
+        text.append(TEXT['_build_dmarc_commentary']['the_dmarc_configuration_was_observed_to'])
         text.append("")
-        text.append("- Reject messages that fail authentication checks.")
+        text.append(TEXT['_build_dmarc_commentary']['reject_messages_that_fail_authentication_checks'])
 
     elif dmarc["assessment"] == "ACCEPTABLE":
 
-        text.append("The DMARC configuration was observed to:")
+        text.append(TEXT['_build_dmarc_commentary']['the_dmarc_configuration_was_observed_to'])
         text.append("")
 
         text.append(
-            "- Treat messages that fail authentication checks as suspicious."
+            TEXT['_build_dmarc_commentary']['treat_messages_that_fail_authentication_checks_as']
         )
 
     elif dmarc["assessment"] == "INSECURE":
 
-        text.append("The DMARC configuration was observed to:")
+        text.append(TEXT['_build_dmarc_commentary']['the_dmarc_configuration_was_observed_to'])
         text.append("")
         text.append(
-            "- Monitor authentication failures without enforcing remediation "
-            "actions."
+            TEXT['_build_dmarc_commentary']['monitor_authentication_failures_without_enforcing_remediation_actions']
         )
 
     elif dmarc["assessment"] == "MISSING":
 
-        text.append("No DMARC policy was identified for the domain.")
+        text.append(TEXT['_build_dmarc_commentary']['no_dmarc_policy_was_identified_for_the'])
         text.append("")
 
         text.append(
-            "As a result, receiving organisations are not provided with "
-            "guidance on how to handle messages that fail SPF or DKIM "
-            "validation, reducing the effectiveness of the domain's email "
-            "authentication controls."
+            TEXT['_build_dmarc_commentary']['as_a_result_receiving_organisations_are_not']
         )
 
     if dmarc["assessment"] != "MISSING":
 
         if "pct" in tags:
             text.append(
-                f"- Apply the policy to {tags['pct']}% of received messages."
+                TEXT['_build_dmarc_commentary']['apply_the_policy_to_value_1_of'].format(value_1=tags['pct'])
             )
 
         if "adkim" in tags:
             text.append(
-                f"- Use {'strict' if tags['adkim'] == 's' else 'relaxed'} "
-                "DKIM alignment."
+                TEXT['_build_dmarc_commentary']['use_value_1_dkim_alignment'].format(value_1='strict' if tags['adkim'] == 's' else 'relaxed')
             )
 
         if "aspf" in tags:
             text.append(
-                f"- Use {'strict' if tags['aspf'] == 's' else 'relaxed'} "
-                "SPF alignment."
+                TEXT['_build_dmarc_commentary']['use_value_1_spf_alignment'].format(value_1='strict' if tags['aspf'] == 's' else 'relaxed')
             )
 
         if "rua" in tags:
 
             text.append("")
             text.append(
-                "DMARC aggregate reports were configured to be sent to:"
+                TEXT['_build_dmarc_commentary']['dmarc_aggregate_reports_were_configured_to_be']
             )
             text.append("")
 
@@ -374,9 +364,7 @@ def _build_dmarc_commentary(text, dmarc):
 
             text.append("")
             text.append(
-                "This configuration helps reduce the risk of domain spoofing "
-                "and provides greater confidence in the authenticity of "
-                "messages originating from the domain."
+                TEXT['_build_dmarc_commentary']['this_configuration_helps_reduce_the_risk_of']
             )
             text.append("")
 
@@ -384,19 +372,14 @@ def _build_dmarc_commentary(text, dmarc):
 
             text.append("")
             text.append(
-                "Whilst less restrictive than a reject policy, this "
-                "configuration still provides meaningful protection against "
-                "spoofing and may help reduce the likelihood of fraudulent "
-                "messages reaching end users."
+                TEXT['_build_dmarc_commentary']['whilst_less_restrictive_than_a_reject_policy']
             )
             text.append("")
 
         elif dmarc["assessment"] == "INSECURE":
 
             text.append(
-                "Although this configuration provides visibility through "
-                "reporting, it does not provide meaningful protection against "
-                "domain spoofing or email impersonation attacks."
+                TEXT['_build_dmarc_commentary']['although_this_configuration_provides_visibility_through_reporting']
             )
             text.append("")
 
@@ -409,7 +392,7 @@ def _build_mta_sts_commentary(text, mta):
     Build the MTA-STS technical commentary section.
     """
 
-    text.append("### Mail Transfer Agent Strict Transport Security (MTA-STS)")
+    text.append(TEXT['_build_mta_sts_commentary']['mail_transfer_agent_strict_transport_security_mta'])
     text.append("")
 
     text.append(CONTROL_DEFINITIONS["MTA-STS"])
@@ -419,21 +402,20 @@ def _build_mta_sts_commentary(text, mta):
 
     if mta["assessment"] == "SECURE":
 
-        text.append("The MTA-STS configuration was observed to:")
+        text.append(TEXT['_build_mta_sts_commentary']['the_mta_sts_configuration_was_observed_to'])
         text.append("")
 
-        text.append("- Operate in enforcement mode.")
+        text.append(TEXT['_build_mta_sts_commentary']['operate_in_enforcement_mode'])
 
         if mta_policy["max_age"]:
             text.append(
-                f"- Cache policy information for {mta_policy['max_age']} "
-                "seconds."
+                TEXT['_build_mta_sts_commentary']['cache_policy_information_for_value_1_seconds'].format(value_1=mta_policy['max_age'])
             )
 
         if mta_policy["mx"]:
             text.append("")
             text.append(
-                "The following authorised mail servers were identified:"
+                TEXT['_build_mta_sts_commentary']['the_following_authorised_mail_servers_were_identified']
             )
 
             for mx in mta_policy["mx"]:
@@ -442,28 +424,25 @@ def _build_mta_sts_commentary(text, mta):
         text.append("")
 
         text.append(
-            "This configuration helps reduce the risk of SMTP downgrade and "
-            "adversary-in-the-middle attacks by ensuring email is delivered "
-            "over trusted encrypted channels."
+            TEXT['_build_mta_sts_commentary']['this_configuration_helps_reduce_the_risk_of']
         )
 
     elif mta["assessment"] == "ACCEPTABLE":
 
-        text.append("The MTA-STS configuration was observed to:")
+        text.append(TEXT['_build_mta_sts_commentary']['the_mta_sts_configuration_was_observed_to'])
         text.append("")
 
-        text.append("- Operate in testing mode.")
+        text.append(TEXT['_build_mta_sts_commentary']['operate_in_testing_mode'])
 
         if mta_policy["max_age"]:
             text.append(
-                f"- Cache policy information for {mta_policy['max_age']} "
-                "seconds."
+                TEXT['_build_mta_sts_commentary']['cache_policy_information_for_value_1_seconds'].format(value_1=mta_policy['max_age'])
             )
 
         if mta_policy["mx"]:
             text.append("")
             text.append(
-                "The following authorised mail servers were identified:"
+                TEXT['_build_mta_sts_commentary']['the_following_authorised_mail_servers_were_identified']
             )
 
             for mx in mta_policy["mx"]:
@@ -471,41 +450,31 @@ def _build_mta_sts_commentary(text, mta):
 
         text.append("")
         text.append(
-            "Although not fully enforced, this demonstrates an intention to "
-            "deploy stronger email transport security controls and provides "
-            "visibility of potential TLS delivery issues."
+            TEXT['_build_mta_sts_commentary']['although_not_fully_enforced_this_demonstrates_an']
         )
 
     elif mta["assessment"] == "INSECURE":
 
-        text.append("The MTA-STS configuration was observed to:")
+        text.append(TEXT['_build_mta_sts_commentary']['the_mta_sts_configuration_was_observed_to'])
         text.append("")
-        text.append("- Operate in a non-enforcing mode.")
+        text.append(TEXT['_build_mta_sts_commentary']['operate_in_a_non_enforcing_mode'])
         text.append("")
         text.append(
-            "As a result, email delivery may continue to rely on opportunistic"
-            " TLS without providing meaningful protection against SMTP " \
-            "downgrade attacks."
+            TEXT['_build_mta_sts_commentary']['as_a_result_email_delivery_may_continue']
         )
 
     elif mta["assessment"] == "UNKNOWN":
 
         text.append(
-            "An MTA-STS DNS record was also identified; however, the "
-            "associated policy could not be successfully retrieved or "
-            "validated. Consequently, it was not possible to confirm that "
-            "MTA-STS was operating as intended."
+            TEXT['_build_mta_sts_commentary']['an_mta_sts_dns_record_was_also']
         )
 
     elif mta["assessment"] == "MISSING":
 
-        text.append("No MTA-STS policy was identified for the domain.")
+        text.append(TEXT['_build_mta_sts_commentary']['no_mta_sts_policy_was_identified_for'])
         text.append("")
         text.append(
-            "As a result, email delivery may rely solely on opportunistic TLS, "
-            "reducing assurance that messages are delivered over trusted "
-            "encrypted channels and increasing exposure to SMTP downgrade "
-            "attacks."
+            TEXT['_build_mta_sts_commentary']['as_a_result_email_delivery_may_rely']
         )
 
     text.append("")
@@ -522,30 +491,25 @@ def _build_spoofing_commentary(text, spoof_result):
     if not spoof_result:
         return
 
-    text.append("### Controlled Spoofing Assessment")
+    text.append(TEXT['_build_spoofing_commentary']['controlled_spoofing_assessment'])
     text.append("")
 
     if spoof_result.get("successful"):
 
         text.append(
-            "A controlled spoofing assessment identified that an email "
-            "claiming to originate from the target domain could be "
-            "successfully generated and delivered during testing."
+            TEXT['_build_spoofing_commentary']['a_controlled_spoofing_assessment_identified_that_an']
         )
 
         text.append("")
 
         text.append(
-            "Although email authentication controls were present, "
-            "testing demonstrated that these controls did not "
-            "effectively prevent delivery of a spoofed message."
+            TEXT['_build_spoofing_commentary']['although_email_authentication_controls_were_present_testing']
         )
 
     else:
 
         text.append(
-            "Testing did not identify evidence that a spoofed "
-            "email could be successfully delivered."
+            TEXT['_build_spoofing_commentary']['testing_did_not_identify_evidence_that_a']
         )
 
     text.append("")

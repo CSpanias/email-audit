@@ -6,8 +6,8 @@ evidence captured during an email security assessment.
 """
 
 
-from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from email_audit.constants import (
     DMARC_MAP,
@@ -15,12 +15,9 @@ from email_audit.constants import (
 )
 
 from email_audit.output.console import (
+    console,
     rich_assessment_colour,
 )
-
-
-console = Console()
-
 
 # ---------------------------------------------------------------------------
 # Authentication Evidence
@@ -33,12 +30,12 @@ def _colour_result(value):
     value = value.upper()
 
     if value == "PASS":
-        return f"[green]{value}[/green]"
+        return Text(value, style="green")
 
     if value == "FAIL":
-        return f"[red]{value}[/red]"
+        return Text(value, style="red")
 
-    return f"[yellow]{value}[/yellow]"
+    return Text(value, style="yellow")
 
 
 def report_authentication_validation(auth_results):
@@ -110,14 +107,18 @@ def report_configuration_validation(results):
     mode = mta.get("policy", {}).get("mode", "")
     mta_config = MTA_MAP.get(mode, "Not Present")
 
-    table.add_row("SPF", spf_config, rich_assessment_colour(spf["assessment"]))
-    table.add_row("DKIM", selector, rich_assessment_colour(dkim["assessment"]))
+    table.add_row("SPF", Text(spf_config), rich_assessment_colour(spf["assessment"]))
+    table.add_row("DKIM", Text(selector), rich_assessment_colour(dkim["assessment"]))
     table.add_row(
-        "DMARC", dmarc_config,rich_assessment_colour(dmarc["assessment"])
+        "DMARC", Text(dmarc_config), rich_assessment_colour(dmarc["assessment"])
     )
 
     table.add_row(
-        "MTA-STS", mta_config, rich_assessment_colour(mta["assessment"])
+        "MTA-STS", Text(mta_config), rich_assessment_colour(mta["assessment"])
     )
+    tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
+    if tls_rpt is not None:
+        table.add_row("TLS-RPT", Text(tls_rpt["assessment"]),
+                      rich_assessment_colour(tls_rpt["assessment"]))
 
     console.print(table)

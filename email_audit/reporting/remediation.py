@@ -5,8 +5,12 @@ Builds remediation recommendations and supporting references based on
 identified weaknesses in the assessed email security controls.
 """
 
-from email_audit.constants import REFERENCES
+from email_audit.dns.dkim import weak_dkim_keys
+from email_audit.reporting.definitions import load_definitions
 
+TEXT = load_definitions("narratives")['remediation']
+REFERENCES = load_definitions("reference")["references"]
+ADDITIONAL = load_definitions("narratives")["additional_checks"]
 
 # ---------------------------------------------------------------------------
 # References
@@ -31,6 +35,8 @@ def build_references(results, auth_results=None, spoof_result=None):
 
     if dkim["assessment"] in ["MISSING", "UNKNOWN"]:
         refs.add("dkim")
+    if weak_dkim_keys(dkim):
+        refs.add("dkim_crypto")
 
     if dmarc["assessment"] in ["MISSING", "UNKNOWN"]:
         refs.add("dmarc")
@@ -38,6 +44,9 @@ def build_references(results, auth_results=None, spoof_result=None):
 
     if mta["assessment"] in ["MISSING", "UNKNOWN"]:
         refs.add("mta_sts")
+    tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
+    if tls_rpt and tls_rpt["assessment"] in ["MISSING", "INVALID"]:
+        refs.add("tls_rpt")
 
     if auth_results:
 
@@ -71,6 +80,16 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
     dkim = results[1]
     dmarc = results[2]
     mta = results[3]
+    tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
+    additional_recommendations = []
+    for key in weak_dkim_keys(dkim):
+        additional_recommendations.append(
+            ADDITIONAL["weak_dkim_recommendation"].format(selector=key["selector"])
+        )
+    if tls_rpt and tls_rpt["assessment"] in ["MISSING", "INVALID"]:
+        additional_recommendations.append(
+            ADDITIONAL[f"tls_rpt_{tls_rpt['assessment'].lower()}_recommendation"]
+        )
 
     all_missing = (
             spf["assessment"] == "MISSING"
@@ -81,40 +100,32 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
 
     if spf["assessment"] == "MISSING":
         recommendations.append(
-            "Publish an SPF record to explicitly define authorised mail "
-            "sending infrastructure."
+            TEXT['build_recommendations']['publish_an_spf_record_to_explicitly_define']
         )
 
     elif spf["assessment"] == "INSECURE":
         recommendations.append(
-            "Replace the '+all' SPF mechanism with a restrictive policy to "
-            "prevent unauthorised systems from sending email on behalf of the "
-            "domain."
+            TEXT['build_recommendations']['replace_the_all_spf_mechanism_with_a']
         )
 
     if dkim["assessment"] == "UNKNOWN":
         recommendations.append(
-            "Configure DKIM signing and ensure the associated public key is"
-            " published and publicly accessible."
+            TEXT['build_recommendations']['configure_dkim_signing_and_ensure_the_associated']
         )
 
     if dmarc["assessment"] == "MISSING":
         recommendations.append(
-            "Implement DMARC with an appropriate reporting and enforcement "
-            "policy to improve protection against spoofing and impersonation "
-            "attacks."
+            TEXT['build_recommendations']['implement_dmarc_with_an_appropriate_reporting_and']
         )
 
     if mta["assessment"] == "MISSING":
         recommendations.append(
-            "Deploy MTA-STS to strengthen SMTP transport security and reduce "
-            "the risk of downgrade attacks."
+            TEXT['build_recommendations']['deploy_mta_sts_to_strengthen_smtp_transport']
         )
 
     elif mta["assessment"] == "UNKNOWN":
         recommendations.append(
-            "Review the published MTA-STS configuration and ensure the policy "
-            "can be successfully retrieved and validated by external systems."
+            TEXT['build_recommendations']['review_the_published_mta_sts_configuration_and']
         )
 
     # -----------------------------------------------------------------------
@@ -125,16 +136,11 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
         if auth_results.get("spf") == "temperror":
 
             recommendations.append(
-                "Investigate the cause of SPF processing failures and review "
-                "the published SPF record for excessive complexity, DNS "
-                "lookup limits, nested include mechanisms or DNS "
-                "resolution issues."
+                TEXT['build_recommendations']['investigate_the_cause_of_spf_processing_failures']
             )
 
             recommendations.append(
-                "Validate that the SPF policy can be successfully processed "
-                "by receiving mail systems and that the effective number of "
-                "DNS lookups remains within RFC limitations."
+                TEXT['build_recommendations']['validate_that_the_spf_policy_can_be']
             )
 
     # --------------------------------------------------------------------------
@@ -145,18 +151,14 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
         if spoof_result.get("successful"):
 
             recommendations.append(
-                "Investigate the conditions that allowed successful domain "
-                "spoofing during testing and identify any weaknesses affecting "
-                "the effectiveness of the implemented email authentication "
-                "controls."
+                TEXT['build_recommendations']['investigate_the_conditions_that_allowed_successful_domain']
             )
 
             recommendations.append(
-                "Review SPF, DKIM and DMARC configurations and validate that "
-                "email authentication controls operate as intended under "
-                "real-world conditions."
+                TEXT['build_recommendations']['review_spf_dkim_and_dmarc_configurations_and']
             )
 
+    recommendations.extend(additional_recommendations)
 
     # --------------------------------------------------------------------------
     # No Controls at All
@@ -164,17 +166,13 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
     if all_missing:
     
             text = (
-                "The assessment identified the absence of SPF, DKIM, DMARC "
-                "and MTA-STS controls. The organisation should implement a "
-                "baseline email security framework consisting of these "
-                "mechanisms to improve protection against spoofing, "
-                "impersonation and insecure email transport."
+                TEXT['build_recommendations']['the_assessment_identified_the_absence_of_spf']
             )
+            if additional_recommendations:
+                text += "\n\n" + "\n".join(f"- {item}" for item in additional_recommendations)
     
             text += (
-                "\n\nFollowing implementation, the effectiveness of the "
-                "controls should be validated through periodic reviews and "
-                "testing to ensure they continue to operate as intended."
+                TEXT['build_recommendations']['follow_up_after_paragraph']
             )
     
             text += build_references(results, auth_results, spoof_result)
@@ -183,10 +181,7 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
 
     if not recommendations:
         text = (
-            "Maintain the current email authentication and transport security "
-            "controls. Periodic reviews should be conducted to ensure SPF, "
-            "DKIM, DMARC and MTA-STS configurations remain aligned with "
-            "business requirements and continue to operate effectively."
+            TEXT['build_recommendations']['maintain_the_current_email_authentication_and_transport']
         )
 
         text += build_references(results, auth_results, spoof_result)
@@ -194,17 +189,14 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
         return text
 
     text = (
-        "The identified weaknesses should be addressed to further strengthen "
-        "the domain's email security posture:\n\n"
+        TEXT['build_recommendations']['the_identified_weaknesses_should_be_addressed_to']
     )
 
     for recommendation in recommendations:
         text += f"- {recommendation}\n"
 
     text += (
-        "\nFollowing implementation, the effectiveness of the controls should "
-        "be validated through periodic reviews and testing to ensure they "
-        "continue to operate as intended."
+        TEXT['build_recommendations']['follow_up_after_list']
     )
 
     text += build_references(results, auth_results, spoof_result)

@@ -1,0 +1,1 @@
+"""Email security assessment toolkit."""

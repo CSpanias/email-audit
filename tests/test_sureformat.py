@@ -13,7 +13,7 @@ from email_audit.reporting.sureformat import export_sureformat
 
 class SureFormatTests(unittest.TestCase):
     def setUp(self):
-        self.directory = tempfile.TemporaryDirectory(dir=os.environ["TEMP"])
+        self.directory = tempfile.TemporaryDirectory()
         self.old_cwd = os.getcwd()
         os.chdir(self.directory.name)
         self.addCleanup(self.directory.cleanup)
@@ -40,7 +40,7 @@ class SureFormatTests(unittest.TestCase):
         self.assertEqual(count, 2)
         self.assertIn("unknown", output.getvalue())
 
-    def test_cli_writes_selected_export_and_keeps_markdown(self):
+    def test_cli_writes_selected_export_and_keeps_html(self):
         findings = [
             {"id": "email-audit", "description": "Review"},
             {"id": "unmapped", "description": "Omitted from XML"},
@@ -52,23 +52,24 @@ class SureFormatTests(unittest.TestCase):
                 for name in (
                     "get_spf_record", "get_dmarc_record", "check_mta_sts",
                     "get_mta_sts_policy", "parse_mta_sts_policy", "assess_spf",
-                    "assess_dkim", "assess_dmarc", "assess_mta_sts",
-                    "print_assessment", "print_posture", "build_commentary",
+                    "assess_dkim_records", "assess_dmarc", "assess_mta_sts",
+                    "print_assessment", "build_commentary",
                     "build_recommendations",
                 ):
                     stack.enter_context(patch.object(cli, name))
                 stack.enter_context(
-                    patch.object(cli, "check_dkim_dns", return_value=(None, None, False))
+                    patch.object(cli, "check_dkim_selectors", return_value=[])
                 )
+                stack.enter_context(patch.object(cli, "get_tls_rpt_records", return_value=([], None)))
                 stack.enter_context(patch.object(cli, "build_findings", return_value=findings))
-                markdown = stack.enter_context(
-                    patch.object(cli, "export_markdown", return_value="x.md")
+                html = stack.enter_context(
+                    patch.object(cli, "export_html", return_value="x.html")
                 )
                 summary = stack.enter_context(patch.object(cli, "print_completion_summary"))
 
                 cli.main()
 
-                markdown.assert_called_once()
+                html.assert_called_once()
                 self.assertEqual(
                     summary.call_args.kwargs["output_format"], "XML" if flag else "JSON"
                 )

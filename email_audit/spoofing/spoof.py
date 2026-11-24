@@ -12,6 +12,7 @@ from shutil import which
 from email_audit.utils import run_command
 from email_audit.output.console import (
     colour_assessment,
+    console,
     print_section,
 )
 
@@ -142,7 +143,7 @@ def report_spoof(result):
     print()
 
     print("Assessment:")
-    print(f"{colour_assessment(result['assessment'])}")
+    console.print(colour_assessment(result["assessment"]))
 
     print()
 

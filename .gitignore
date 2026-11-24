@@ -13,6 +13,15 @@ dist/
 *.msg
 *.md
 *.json
+/*.html
 
 # Keep documentation
 !README.md
+!docs/*.md
+!docs/**/*.md
+
+# Local tooling
+.venv/
+.pytest_cache/
+.ruff_cache/
+site/

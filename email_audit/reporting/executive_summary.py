@@ -6,6 +6,12 @@ the assessed email authentication and transport security controls.
 """
 
 
+from email_audit.dns.dkim import weak_dkim_keys
+from email_audit.reporting.definitions import load_definitions
+
+TEXT = load_definitions("narratives")['executive_summary']
+
+
 # ---------------------------------------------------------------------------
 # Executive Summary
 # ---------------------------------------------------------------------------
@@ -42,6 +48,7 @@ def build_executive_summary(
     authentication_strong = (
         spf["assessment"] in ["SECURE", "ACCEPTABLE"]
         and dkim["assessment"] == "PRESENT"
+        and not weak_dkim_keys(dkim)
         and dmarc["assessment"] in ["SECURE", "ACCEPTABLE"]
     )
 
@@ -67,31 +74,13 @@ def build_executive_summary(
         and not authentication_working
     )
 
-    # Experimental scoring
-    configured_controls = 0
-
-    if spf["assessment"] in ["SECURE", "ACCEPTABLE"]:
-        configured_controls += 1
-
-    if dkim["assessment"] == "PRESENT":
-        configured_controls += 1
-
-    if dmarc["assessment"] in ["SECURE", "ACCEPTABLE"]:
-        configured_controls += 1
-
-    if mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
-        configured_controls += 1
-
     text = []
 
     #---------------------------------------------------------------------------
     # Introduction (first paragraph)
     #---------------------------------------------------------------------------
     intro = (
-        f"An email security review was performed against the {domain} "
-        "domain to assess the implementation and effectiveness of "
-        "industry-standard email authentication and transport security "
-        "controls."
+        TEXT['build_executive_summary']['an_email_security_review_was_performed_against'].format(domain=domain)
     )
 
     text.append(intro)
@@ -104,17 +93,14 @@ def build_executive_summary(
     if authentication_present:
 
         positive = (
-            "SPF, DKIM and DMARC controls were identified during "
-            "the assessment. "
+            TEXT['build_executive_summary']['spf_dkim_and_dmarc_controls_were_identified']
         )
 
         # SPF, DKIM and DMARC controls were identified and validated
         if authentication_working:
 
             positive += (
-                "Successful validation of these controls was observed "
-                "in the supplied email sample, providing assurance "
-                "that they were functioning as intended. "
+                TEXT['build_executive_summary']['successful_validation_of_these_controls_was_observed']
             )
 
             # Authentication controls broadly align with recognised industry 
@@ -122,10 +108,7 @@ def build_executive_summary(
             if authentication_strong:
 
                 positive += (
-                    "Collectively, these controls align with recognised "
-                    "industry practices and significantly reduce exposure "
-                    "to domain spoofing, impersonation attacks and "
-                    "fraudulent email activity."
+                    TEXT['build_executive_summary']['collectively_these_controls_align_with_recognised_industry']
                 )
 
         # SPF, DKIM and DMARC controls were identified, but validation was 
@@ -133,19 +116,13 @@ def build_executive_summary(
         elif authentication_failed:
 
             positive += (
-                "Validation of one or more email authentication controls "
-                "was unsuccessful, indicating that the implemented "
-                "controls may not be operating as intended and reducing "
-                "confidence in the effectiveness of the domain's "
-                "anti-spoofing protections."
+                TEXT['build_executive_summary']['validation_of_one_or_more_email_authentication']
             )
 
             if auth_results.get("spf") == "temperror":
 
                 positive += (
-                    " Specifically, SPF evaluation resulted in a temporary "
-                    "processing error, preventing successful validation of "
-                    "the configured SPF policy."
+                    TEXT['build_executive_summary']['specifically_spf_evaluation_resulted_in_a_temporary']
                 )
 
         # SPF, DKIM and DMARC controls were identified; however, the supplied
@@ -154,19 +131,14 @@ def build_executive_summary(
         else:
 
             positive += (
-                "Email authentication controls were identified; however, "
-                "the supplied email sample did not contain sufficient "
-                "authentication results to validate their operation."
+                TEXT['build_executive_summary']['email_authentication_controls_were_identified_however_the']
             )
 
     # Authentication controls were missing or inadequately implemented
     else:
 
         positive = (
-            "The assessment identified weaknesses affecting the "
-            "domain's ability to verify the authenticity of email "
-            "communications, increasing exposure to spoofing and "
-            "impersonation attacks."
+            TEXT['build_executive_summary']['the_assessment_identified_weaknesses_affecting_the_domain']
         )
 
     text.append(positive)
@@ -177,54 +149,49 @@ def build_executive_summary(
     if spoof_result and spoof_result.get("successful"):
 
         text.append(
-            "Despite the presence of email authentication controls, "
-            "testing identified that emails claiming to originate from the "
-            f"{domain} domain could be successfully spoofed. This increases "
-            "the risk of phishing, impersonation and business email compromise "
-            "attacks and indicates that the implemented protections may not "
-            "be operating effectively in practice."
+            TEXT['build_executive_summary']['despite_the_presence_of_email_authentication_controls'].format(domain=domain)
         )
 
-    if configured_controls == 0:
+    if (
+        spf["assessment"] not in ["SECURE", "ACCEPTABLE"]
+        and dkim["assessment"] != "PRESENT"
+        and dmarc["assessment"] not in ["SECURE", "ACCEPTABLE"]
+        and mta["assessment"] not in ["SECURE", "ACCEPTABLE"]
+    ):
     
         text.append(
-            "The assessment identified significant weaknesses affecting the "
-            "domain's email security posture. SPF, DKIM, DMARC and MTA-STS "
-            "controls were not identified, limiting the ability of receiving "
-            "organisations to verify the authenticity of email communications "
-            "and increasing exposure to spoofing and impersonation attacks."
+            TEXT['build_executive_summary']['the_assessment_identified_significant_weaknesses_affecting_the']
         )
     
 
     elif mta["assessment"] == "MISSING":
 
         text.append(
-            "The assessment also identified an opportunity to further "
-            "strengthen email security. No MTA-STS policy was identified. "
-            "Whilst this does not affect the effectiveness of email "
-            "authentication controls, it reduces assurance that email "
-            "communications are consistently protected against downgrade "
-            "or interception risks during transit between mail systems."
+            TEXT['build_executive_summary']['mta_sts_missing']
         )
 
     elif mta["assessment"] == "UNKNOWN":
 
         text.append(
-            "The assessment also identified an opportunity to further "
-            "strengthen email security. An MTA-STS DNS record was identified; "
-            "however, the associated policy could not be validated. "
-            "Consequently, it was not possible to confirm that the control was "
-            "operating as intended."
+            TEXT['build_executive_summary']['mta_sts_unconfirmed']
         )
 
     elif mta["assessment"] in ["SECURE", "ACCEPTABLE"]:
 
         text.append(
-            "The assessment also identified effective email transport "
-            "security controls through the implementation of MTA-STS. "
-            "This provides additional assurance that email communications "
-            "remain protected whilst in transit between mail systems."
+            TEXT['build_executive_summary']['the_assessment_also_identified_effective_email_transport']
         )
+
+    additional = load_definitions("narratives")["additional_checks"]
+    for key in weak_dkim_keys(dkim):
+        text.append(additional["weak_dkim"].format(
+            selector=key["selector"], bits=key["key_bits"]
+        ))
+    tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
+    if tls_rpt and tls_rpt["assessment"] != "PRESENT":
+        text.append(additional[f"tls_rpt_{tls_rpt['assessment'].lower()}"].format(
+            reason=tls_rpt["breakdown"][0] if tls_rpt["breakdown"] else ""
+        ))
 
     #-----------------------------------------------------------------------
     # Conclusion (fourth paragraph)
@@ -236,24 +203,13 @@ def build_executive_summary(
     ):
 
         text.append(
-            "Overall, the domain demonstrated a mature email security "
-            "posture. Effective authentication and transport security "
-            "controls were identified and aligned with recognised industry "
-            "practices, significantly reducing exposure to spoofing, "
-            "impersonation and email-based threats."
+            TEXT['build_executive_summary']['mature_with_transport_security']
         )
 
     elif authentication_strong and authentication_working:
 
         text.append(
-            "Overall, the domain demonstrated a mature email security "
-            "posture. Effective authentication controls were implemented "
-            "and observed to be functioning correctly, significantly "
-            "reducing exposure to spoofing and impersonation attacks. "
-            "Addressing the remaining transport-security weakness would "
-            "further improve assurance that email communications remain "
-            "secure throughout delivery and strengthen resilience against "
-            "email-based threats."
+            TEXT['build_executive_summary']['mature_without_transport_security']
         )
 
     elif authentication_strong and authentication_failed:
@@ -261,41 +217,25 @@ def build_executive_summary(
         if spoof_result and spoof_result.get("successful"):
 
             text.append(
-                "Overall, the domain demonstrated a generally mature "
-                "email security posture. Authentication controls were "
-                "identified; however, validation was not fully successful "
-                "and a controlled spoofing assessment demonstrated that "
-                "emails claiming to originate from the domain could be "
-                "successfully spoofed. These observations reduce assurance "
-                "that the implemented controls are operating as intended."
+                TEXT['build_executive_summary']['authentication_failed_spoof_delivered']
             )
 
         else:
 
             text.append(
-                "Overall, the domain demonstrated a generally mature email "
-                "security posture. Authentication controls were identified; "
-                "however, one or more validation checks were unsuccessful, "
-                "reducing assurance that the controls are operating as intended."
+                TEXT['build_executive_summary']['authentication_failed']
             )
 
     elif authentication_present:
 
         text.append(
-            "Overall, the domain demonstrated a generally effective "
-            "email security posture; however, opportunities remain to "
-            "further reduce exposure to spoofing, impersonation and "
-            "other email-based threats."
+            TEXT['build_executive_summary']['overall_the_domain_demonstrated_a_generally_effective']
         )
 
     else:
 
         text.append(
-            "Overall, the domain demonstrated a weak email security "
-            "posture. The absence of key authentication and transport "
-            "security controls increases the likelihood of email "
-            "spoofing, impersonation attacks and loss of trust in "
-            "email communications originating from the domain."
+            TEXT['build_executive_summary']['overall_the_domain_demonstrated_a_weak_email']
         )
 
     return "\n\n".join(text)

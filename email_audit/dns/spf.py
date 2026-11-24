@@ -38,8 +38,6 @@ def assess_spf(record):
         "breakdown": [],
         "impact": "",
         "assessment": "",
-        "score": 0,
-        "max_score": 3
     }
 
     if not record:
@@ -83,7 +81,6 @@ def assess_spf(record):
             "Unauthorised sending mail servers should be rejected."
         )
         result["assessment"] = "SECURE"
-        result["score"] = 3
 
     elif "~all" in elements:
 
@@ -91,7 +88,6 @@ def assess_spf(record):
             "Unauthorised senders may still be accepted by some recipients."
         )
         result["assessment"] = "ACCEPTABLE"
-        result["score"] = 2
 
     elif "+all" in elements:
 
@@ -99,7 +95,6 @@ def assess_spf(record):
             "Any sender is effectively authorised to send email."
         )
         result["assessment"] = "INSECURE"
-        result["score"] = 0
 
     else:
 
@@ -107,6 +102,5 @@ def assess_spf(record):
             "SPF enforcement behaviour could not be clearly determined."
         )
         result["assessment"] = "UNKNOWN"
-        result["score"] = 0
 
     return result

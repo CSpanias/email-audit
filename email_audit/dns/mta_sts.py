@@ -107,8 +107,6 @@ def assess_mta_sts(record, policy):
         "breakdown": [],
         "impact": "",
         "assessment": "UNKNOWN",
-        "score": 0,
-        "max_score": 3
     }
 
     if not record:
@@ -139,25 +137,21 @@ def assess_mta_sts(record, policy):
     if mode == "enforce":
         result["impact"] = ("Compatible mail servers should only deliver email over validated TLS connections.")
         result["assessment"] = "SECURE"
-        result["score"] = 3
 
     elif mode == "testing":
 
         result["impact"] = ("TLS failures can be monitored, but the policy is not yet fully enforced.")
         result["assessment"] = "ACCEPTABLE"
-        result["score"] = 2
 
     elif mode == "none":
 
         result["impact"] = ("MTA-STS is published but not enforced.")
         result["assessment"] = "INSECURE"
-        result["score"] = 0
 
     else:
 
         result["impact"] = ("MTA-STS support is advertised, but the policy could not be retrieved or parsed successfully.")
         result["assessment"] = "UNKNOWN"
-        result["score"] = 1
 
     result["policy"] = policy
 

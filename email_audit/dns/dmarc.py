@@ -42,8 +42,6 @@ def assess_dmarc(record):
         "breakdown": [],
         "impact": "",
         "assessment": "",
-        "score": 0,
-        "max_score": 3
     }
 
     if not record:
@@ -51,7 +49,6 @@ def assess_dmarc(record):
         result["breakdown"].append("No DMARC record present")
         result["impact"] = ("Receiving servers are not given any policy for handling authentication failures.")
         result["assessment"] = "MISSING"
-        result["score"] = 0
 
         return result
 
@@ -100,25 +97,21 @@ def assess_dmarc(record):
 
         result["impact"] = ("Messages failing SPF or DKIM should be rejected.")
         result["assessment"] = "SECURE"
-        result["score"] = 3
 
     elif policy == "quarantine":
 
         result["impact"] = ("Messages failing authentication should normally be treated as suspicious.")
         result["assessment"] = "ACCEPTABLE"
-        result["score"] = 2
 
     elif policy == "none":
 
         result["impact"] = ("Authentication failures are monitored but not enforced.")
         result["assessment"] = "INSECURE"
-        result["score"] = 0
 
     else:
 
         result["impact"] = ("Policy could not be clearly determined.")
         result["assessment"] = "UNKNOWN"
-        result["score"] = 0
 
     result["tags"] = tags
 

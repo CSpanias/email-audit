@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "email-audit"
 version = "0.3.0"
@@ -10,7 +14,12 @@ authors = [
 ]
 
 dependencies = [
-    "rich>=13.0.0"
+    "rich>=13.0.0",
+    "rich-argparse>=1.7.1",
+    "PyYAML>=6.0",
+    "Markdown>=3.4",
+    "cryptography>=41.0",
+    "dnspython>=2.4",
 ]
 
 keywords = [
@@ -24,3 +33,12 @@ keywords = [
 
 [project.scripts]
 email-audit = "email_audit.cli:main"
+
+[project.optional-dependencies]
+docs = ["mkdocs-material"]
+
+[tool.setuptools.packages.find]
+include = ["email_audit", "email_audit.*"]
+
+[tool.setuptools.package-data]
+email_audit = ["data/*.yaml"]

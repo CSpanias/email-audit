@@ -1,0 +1,36 @@
+email-audit:
+  sureformat_id: SC-2157
+  description: "Email security controls were reviewed for {domain}, including SPF, DKIM, DMARC and MTA-STS."
+missing-spf:
+  sureformat_id: SC-2090
+  description: "No SPF record was identified for {domain}."
+permissive-spf:
+  sureformat_id: SC-2183
+  description: "The SPF record for {domain} contains '+all', permitting any host on the Internet to send email on behalf of the domain."
+missing-dkim:
+  sureformat_id: SC-2165
+  description: "No DKIM selector could be identified for {domain}."
+missing-dmarc:
+  sureformat_id: SC-2166
+  description: "No DMARC record was identified for {domain}."
+missing-mta-sts:
+  sureformat_id: SC-6842
+  description: "No MTA-STS policy was identified for {domain}."
+invalid-mta-sts:
+  sureformat_id: SC-6842
+  description: "An MTA-STS DNS record was identified for {domain}; however, the associated policy could not be retrieved or validated."
+spf-processing-failure:
+  sureformat_id: SC-2089
+  description: "SPF authentication could not be completed successfully during testing due to a temporary processing error."
+email-spoofing-possible:
+  sureformat_id: SC-3349
+  description: "A controlled spoofing assessment demonstrated that an email claiming to originate from the target domain was successfully delivered."
+weak-dkim-rsa-key:
+  sureformat_id: SC-2187
+  description: "The DKIM selector {selector} for {domain} uses an RSA public key of {bits} bits, smaller than 2048 bits."
+missing-tls-rpt:
+  sureformat_id: SC-6840
+  description: "No TLS-RPT reporting policy was identified for {domain}."
+invalid-tls-rpt:
+  sureformat_id: SC-6841
+  description: "The TLS-RPT reporting policy for {domain} is invalid: {reason}."
