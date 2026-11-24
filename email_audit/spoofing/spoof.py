@@ -61,12 +61,53 @@ def _stop_postfix(command):
             f"Could not confirm Postfix stopped (status {status.returncode})"
             + (f": {detail}" if detail else "")
         )
-    print("[+] Stopped the Postfix service started for this assessment.")
+    print("[+] Stopped the Postfix service.")
+
+
+def _offer_stop_existing_relay():
+    """Ask before stopping a relay that was already running."""
+    service = which("service") if sys.platform.startswith("linux") else None
+    if not sys.stdin.isatty() or not service:
+        print("[!] The existing SMTP relay was left running; stop it manually if needed.")
+        return
+
+    command = [service, "postfix"]
+    if os.geteuid() != 0:
+        sudo = which("sudo")
+        if not sudo:
+            print("[!] sudo is unavailable; the existing SMTP relay was left running.")
+            return
+        command.insert(0, sudo)
+
+    try:
+        answer = input("\n[?] Stop the existing local Postfix service? [y/N]: ").strip().lower()
+    except EOFError:
+        print("\n[!] No answer received; the existing SMTP relay was left running.")
+        return
+    if answer not in {"y", "yes"}:
+        print("[*] The existing SMTP relay was left running.")
+        return
+
+    try:
+        status = _postfix_status(command)
+    except OSError as exc:
+        raise RuntimeError(f"Could not check Postfix status: {exc}") from exc
+    if status.returncode == 3:
+        print("[!] Postfix was not running; no service was stopped.")
+    elif status.returncode == 0:
+        _stop_postfix(command)
+    else:
+        detail = (status.stderr or status.stdout).strip()
+        raise RuntimeError(
+            f"Could not determine whether Postfix is running (status {status.returncode})"
+            + (f": {detail}" if detail else "")
+        )
 
 
 def ensure_local_smtp(cleanup):
     """Offer to start Postfix when the local relay is unavailable."""
     if smtp_server_running():
+        cleanup.callback(_offer_stop_existing_relay)
         return None
 
     unavailable = "No SMTP service was detected on localhost:25."
