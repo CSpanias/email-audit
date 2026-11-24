@@ -1,4 +1,17 @@
 additional_checks:
+  spf_unknown: "The SPF configuration could not be determined from the available DNS evidence."
+  dkim_dns_unknown: "DKIM support could not be confirmed because one or more selector DNS lookups failed."
+  dkim_dns_partial: "Some other DKIM selector DNS lookups failed, so discovery was incomplete."
+  dmarc_unknown: "The DMARC configuration could not be determined from the available DNS evidence."
+  dmarc_limited: "The domain published a `p={policy}` DMARC policy with limited coverage or testing enabled."
+  dmarc_testing: "- The `t=y` testing flag requested less restrictive handling of failed messages."
+  dmarc_limited_impact: "Some recipients may apply a less restrictive policy, potentially allowing fraudulent messages to reach recipients. Actual handling depends on the receiving system."
+  dmarc_invalid_coverage: "The DMARC policy's coverage could not be determined because its percentage or testing flag was invalid or duplicated."
+  dmarc_invalid_tag: "The DMARC percentage or testing flag was invalid or duplicated and should be reviewed."
+  dmarc_limited_recommendation: "Review the DMARC sampling and testing settings, then move to full enforcement when legitimate sending sources have been verified."
+  dmarc_invalid_coverage_recommendation: "Correct the invalid or duplicated DMARC percentage or testing flag and verify how receiving systems apply the policy."
+  mta_dns_unknown: "The MTA-STS configuration could not be determined because the DNS lookup failed."
+  dns_retry_recommendation: "Investigate the DNS lookup failures and repeat the affected checks before drawing conclusions about those controls."
   weak_dkim: "The DKIM selector `{selector}` uses a {bits}-bit RSA public key, below the recommended minimum of 2048 bits. A weaker key is more susceptible to cryptographic attacks, which could allow attackers to forge signatures and impersonate the domain."
   tls_rpt_heading: "### SMTP TLS Reporting (TLS-RPT)"
   tls_rpt_present: "A TLS-RPT policy with reporting destinations was identified. Publication does not establish that reports are received or reviewed."
@@ -33,7 +46,7 @@ commentary:
       to successfully complete SPF evaluation. A controlled spoofing assessment further demonstrated that
       a spoofed email claiming to originate from the target domain could be successfully delivered, indicating
       that the intended anti-spoofing protections may not be operating effectively in practice.
-    the_spf_record_utilised_the_permissive_all: The SPF record utilised the permissive `+all` mechanism,
+    the_spf_record_utilised_the_permissive_all: The SPF record utilised the permissive `{policy}` mechanism,
       effectively authorising any host on the Internet to send email on behalf of the domain. This significantly
       reduces the effectiveness of SPF as an anti-spoofing control and may increase exposure to email
       impersonation attacks.
@@ -64,7 +77,7 @@ commentary:
     reject_messages_that_fail_authentication_checks: '- Reject messages that fail authentication checks.'
     treat_messages_that_fail_authentication_checks_as: '- Treat messages that fail authentication checks
       as suspicious.'
-    apply_the_policy_to_value_1_of: '- Apply the policy to {value_1}% of received messages.'
+    apply_the_policy_to_value_1_of: '- Request the policy for {value_1}% of messages through the legacy `pct` tag; receiver implementations may differ.'
     use_value_1_dkim_alignment: '- Use {value_1} DKIM alignment.'
     use_value_1_spf_alignment: '- Use {value_1} SPF alignment.'
     dmarc_aggregate_reports_were_configured_to_be: 'DMARC aggregate reports were configured to be sent
@@ -125,6 +138,8 @@ commentary:
     dmarc_acceptable: The DMARC policy requests quarantine rather than rejection of messages that fail
       DMARC (`p=quarantine`); recipients determine how to handle them.
     dmarc_unknown: The DMARC policy's enforcement could not be determined.
+    dmarc_limited: The published DMARC policy was `p={policy}`, but its sampling or testing settings may
+      lead some recipients to apply less restrictive handling to messages that fail DMARC.
     delivery_cause_unconfirmed: The spoofed message's authentication results were not analysed; review its
       headers and the recipient's handling to determine why it was delivered.
     testing_did_not_identify_evidence_that_a: The spoofing test did not result in confirmed delivery.
@@ -144,6 +159,8 @@ executive_summary:
   sample_not_supplied: No email sample was supplied to provide evidence of these checks in practice.
   sender_protection_monitoring: However, the domain's policy did not request that recipients block
     messages that failed verification.
+  sender_protection_limited: However, the policy allowed some receiving systems to apply less restrictive
+    protection, increasing the risk of impersonation.
   sender_protection_weak: Some sender verification settings were permissive, which could increase the risk
     of impersonation.
   sender_protection_unconfirmed: The effectiveness of some sender verification settings could not be
@@ -208,7 +225,7 @@ remediation:
       enforcement policy to improve protection against spoofing and impersonation attacks.
     deploy_mta_sts_to_strengthen_smtp_transport: Deploy MTA-STS to strengthen SMTP transport security
       and reduce the risk of downgrade attacks.
-    replace_the_all_spf_mechanism_with_a: Replace the `+all` SPF mechanism with a restrictive policy to
+    replace_the_all_spf_mechanism_with_a: Replace the permissive `{policy}` SPF mechanism with a restrictive policy to
       prevent unauthorised systems from sending email on behalf of the domain.
     review_the_published_mta_sts_configuration_and: Review the published MTA-STS configuration and ensure
       the policy can be successfully retrieved and validated by external systems.

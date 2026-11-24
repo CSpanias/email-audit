@@ -2,7 +2,7 @@
 SPF record retrieval and assessment.
 """
 
-from email_audit.utils import run_command
+from email_audit.dns.lookup import get_txt_records
 
 
 
@@ -14,12 +14,9 @@ def get_spf_record(domain):
     Retrieve the SPF record for a target domain.
     """
 
-    output = run_command(["dig", "+short", domain, "TXT"])
-
-    for line in output.splitlines():
-
-        if "v=spf1" in line:
-            return line.strip('"')
+    for record in get_txt_records(domain):
+        if record.lower().split()[:1] == ["v=spf1"]:
+            return record
 
     return ""
 
@@ -27,7 +24,7 @@ def get_spf_record(domain):
 # ---------------------------------------------------------------------------
 # SPF Assessment
 # ---------------------------------------------------------------------------
-def assess_spf(record):
+def assess_spf(record, dns_error=None):
     """
     Assess the security posture of an SPF record.
     """
@@ -38,7 +35,15 @@ def assess_spf(record):
         "breakdown": [],
         "impact": "",
         "assessment": "",
+        "all_policy": "",
     }
+
+    if dns_error is not None:
+        result["breakdown"].append(f"DNS lookup failed: {dns_error}")
+        result["impact"] = "SPF configuration could not be determined."
+        result["assessment"] = "UNKNOWN"
+        result["dns_error"] = dns_error
+        return result
 
     if not record:
 
@@ -70,26 +75,30 @@ def assess_spf(record):
                 f"{element} → Authorised IPv6 sender"
             )
 
-        elif element.endswith("all"):
+        elif element.lower() in ("all", "+all", "-all", "~all", "?all"):
             result["breakdown"].append(
                 f"{element} → SPF enforcement policy"
             )
 
-    if "-all" in elements:
+    all_policy = next((element.lower() for element in elements[1:]
+                       if element.lower() in ("all", "+all", "-all", "~all", "?all")), "")
+    result["all_policy"] = all_policy
+
+    if all_policy == "-all":
 
         result["impact"] = (
             "Unauthorised sending mail servers should be rejected."
         )
         result["assessment"] = "SECURE"
 
-    elif "~all" in elements:
+    elif all_policy == "~all":
 
         result["impact"] = (
             "Unauthorised senders may still be accepted by some recipients."
         )
         result["assessment"] = "ACCEPTABLE"
 
-    elif "+all" in elements:
+    elif all_policy in ("all", "+all"):
 
         result["impact"] = (
             "Any sender is effectively authorised to send email."

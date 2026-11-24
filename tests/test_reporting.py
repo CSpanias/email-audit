@@ -167,6 +167,41 @@ class ReportingTests(unittest.TestCase):
                 report = render_html("example.test", commentary, "", self.results, [])
                 self.assertIn("</ul>\n<p>Although this configuration", report)
 
+    def test_reduced_dmarc_coverage_is_consistent_across_reports(self):
+        cases = (
+            ("p=reject; pct=0", "Reject", "pct", "ACCEPTABLE"),
+            ("p=quarantine; pct=50", "Quarantine", "pct", "INSECURE"),
+            ("p=reject; t=y", "Reject", "t=y", "ACCEPTABLE"),
+        )
+        for policy, configuration, indicator, status in cases:
+            with self.subTest(policy=policy):
+                self.results[2] = assess_dmarc(f"v=DMARC1; {policy}")
+                commentary = build_commentary(
+                    "example.test", self.results, spoof_result={"successful": True}
+                )
+                summary = build_executive_summary("example.test", self.results)
+                recommendations = build_recommendations(self.results)
+                self.assertIn(f"{configuration} (limited)", commentary)
+                self.assertIn(indicator, commentary)
+                self.assertIn("less restrictive", commentary)
+                self.assertNotIn("monitoring-only policy", commentary)
+                self.assertIn("receiving systems to apply less restrictive protection", summary)
+                self.assertIn("areas requiring further review", summary)
+                self.assertIn("DMARC sampling and testing", recommendations)
+                report = render_html("example.test", commentary, recommendations, self.results, [])
+                self.assertIn(f"<strong>{status}</strong>", report)
+                self.assertIn(f"{configuration} (limited)", report)
+
+    def test_invalid_dmarc_coverage_is_not_reported_as_enforced(self):
+        self.results[2] = assess_dmarc("v=DMARC1; p=reject; pct=101")
+        commentary = build_commentary("example.test", self.results, spoof_result={"successful": True})
+        summary = build_executive_summary("example.test", self.results)
+        self.assertIn("Reject (coverage unknown)", commentary)
+        self.assertIn("coverage could not be determined", commentary)
+        self.assertNotIn("101% of messages", commentary)
+        self.assertIn("could not be confirmed", summary)
+        self.assertIn("invalid or duplicated DMARC", build_recommendations(self.results))
+
     def test_spoofing_explanation_uses_observed_dmarc_policy_without_assuming_cause(self):
         for policy, expected in (
             ("none", "The DMARC policy is `p=none`"),

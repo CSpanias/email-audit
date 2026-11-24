@@ -4,7 +4,7 @@ MTA-STS record retrieval, parsing and assessment.
 
 import urllib.request
 
-from email_audit.utils import run_command
+from email_audit.dns.lookup import get_txt_records
 
 
 # ---------------------------------------------------------------------------
@@ -15,9 +15,7 @@ def check_mta_sts(domain):
     Retrieve the MTA-STS DNS TXT record for a target domain.
     """
 
-    output = run_command(["dig", "+short", f"_mta-sts.{domain}", "TXT"])
-    
-    return output.strip()
+    return "\n".join(get_txt_records(f"_mta-sts.{domain}"))
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +90,7 @@ def parse_mta_sts_policy(policy):
 # ---------------------------------------------------------------------------
 # MTA-STS Assessment
 # ---------------------------------------------------------------------------
-def assess_mta_sts(record, policy):
+def assess_mta_sts(record, policy, dns_error=None):
     """
     Assess the security posture of an MTA-STS deployment.
 
@@ -108,6 +106,12 @@ def assess_mta_sts(record, policy):
         "impact": "",
         "assessment": "UNKNOWN",
     }
+
+    if dns_error is not None:
+        result["breakdown"].append(f"DNS lookup failed: {dns_error}")
+        result["impact"] = "MTA-STS configuration could not be determined."
+        result["dns_error"] = dns_error
+        return result
 
     if not record:
 

@@ -75,17 +75,17 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
     text.append("")
 
     # SPF value
-    if "-all" in spf["raw"]:
+    if spf.get("all_policy") == "-all":
         spf_config = "Hard Fail (`-all`)"
 
-    elif "~all" in spf["raw"]:
+    elif spf.get("all_policy") == "~all":
         spf_config = "Soft Fail (`~all`)"
 
-    elif "+all" in spf["raw"]:
-        spf_config = "Permissive (`+all`)"
+    elif spf.get("all_policy") in ("all", "+all"):
+        spf_config = f"Permissive (`{spf['all_policy']}`)"
 
     else:
-        spf_config = "Not Present"
+        spf_config = "Not Present" if spf["assessment"] == "MISSING" else "Unknown"
 
     # DKIM value
     if dkim["assessment"] == "PRESENT":
@@ -94,8 +94,12 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
         dkim_config = "Unable to Confirm"
 
     # DMARC value
-    policy = dmarc.get("tags", {}).get("p", "")
-    dmarc_config = DMARC_MAP.get(policy, "Not Present")
+    policy = dmarc.get("tags", {}).get("p", "").lower()
+    dmarc_config = DMARC_MAP.get(policy, "Not Present" if dmarc["assessment"] == "MISSING" else "Unknown")
+    if dmarc.get("coverage_limited"):
+        dmarc_config += " (limited)"
+    elif dmarc.get("coverage_errors") and policy in {"reject", "quarantine"}:
+        dmarc_config += " (coverage unknown)"
 
     # MTA-STS value
     mode = mta.get("policy", {}).get("mode", "")
@@ -142,7 +146,9 @@ def _build_spf_commentary(text, spf, auth_results):
     elif spf["assessment"] == "INSECURE":
 
         text.append(
-            TEXT['_build_spf_commentary']['the_spf_record_utilised_the_permissive_all']
+            TEXT['_build_spf_commentary']['the_spf_record_utilised_the_permissive_all'].format(
+                policy=spf["all_policy"]
+            )
         )
 
     elif spf["assessment"] == "MISSING":
@@ -152,6 +158,9 @@ def _build_spf_commentary(text, spf, auth_results):
         text.append(
             TEXT['_build_spf_commentary']['as_a_result_receiving_mail_systems_may']
         )
+
+    elif spf["assessment"] == "UNKNOWN":
+        text.append(ADDITIONAL["spf_unknown"])
 
     if spf["assessment"] in ["SECURE", "ACCEPTABLE"]:
 
@@ -264,9 +273,8 @@ def _build_dkim_commentary(text, dkim, auth_results):
 
     elif dkim["assessment"] == "UNKNOWN":
 
-        text.append(
-            TEXT['_build_dkim_commentary']['dkim_support_could_not_be_confirmed_through']
-        )
+        text.append(ADDITIONAL["dkim_dns_unknown"] if dkim.get("dns_errors") else
+                    TEXT['_build_dkim_commentary']['dkim_support_could_not_be_confirmed_through'])
         text.append("")
 
         text.append(
@@ -278,6 +286,8 @@ def _build_dkim_commentary(text, dkim, auth_results):
             "",
             ADDITIONAL["weak_dkim"].format(selector=key["selector"], bits=key["key_bits"]),
         ])
+    if dkim.get("dns_errors") and dkim["assessment"] == "PRESENT":
+        text.extend(["", ADDITIONAL["dkim_dns_partial"]])
     text.append("")
 
 
@@ -299,7 +309,10 @@ def _build_dmarc_commentary(text, dmarc):
 
     tags = dmarc.get("tags", {})
 
-    if dmarc["assessment"] == "SECURE":
+    if dmarc.get("coverage_limited"):
+        text.append(ADDITIONAL["dmarc_limited"].format(policy=tags["p"]))
+
+    elif dmarc["assessment"] == "SECURE":
 
         text.append(TEXT['_build_dmarc_commentary']['the_dmarc_configuration_was_observed_to'])
         text.append("")
@@ -331,12 +344,22 @@ def _build_dmarc_commentary(text, dmarc):
             TEXT['_build_dmarc_commentary']['as_a_result_receiving_organisations_are_not']
         )
 
+    elif dmarc["assessment"] == "UNKNOWN":
+        text.append(ADDITIONAL["dmarc_invalid_coverage"] if dmarc.get("coverage_errors")
+                    else ADDITIONAL["dmarc_unknown"])
+
+    if dmarc.get("coverage_errors") and dmarc["assessment"] != "UNKNOWN":
+        text.extend(["", ADDITIONAL["dmarc_invalid_tag"]])
+
     if dmarc["assessment"] != "MISSING":
 
-        if "pct" in tags:
+        if "pct" in tags and not dmarc.get("coverage_errors"):
             text.append(
                 TEXT['_build_dmarc_commentary']['apply_the_policy_to_value_1_of'].format(value_1=tags['pct'])
             )
+
+        if tags.get("t", "").lower() == "y" and not dmarc.get("coverage_errors"):
+            text.append(ADDITIONAL["dmarc_testing"])
 
         if "adkim" in tags:
             text.append(
@@ -360,7 +383,12 @@ def _build_dmarc_commentary(text, dmarc):
                 address = address.strip().replace("mailto:", "")
                 text.append(f"- {address.strip()}")
 
-        if dmarc["assessment"] == "SECURE":
+        if dmarc.get("coverage_limited"):
+            text.append("")
+            text.append(ADDITIONAL["dmarc_limited_impact"])
+            text.append("")
+
+        elif dmarc["assessment"] == "SECURE":
 
             text.append("")
             text.append(
@@ -467,6 +495,7 @@ def _build_mta_sts_commentary(text, mta):
     elif mta["assessment"] == "UNKNOWN":
 
         text.append(
+            ADDITIONAL["mta_dns_unknown"] if mta.get("dns_error") else
             TEXT['_build_mta_sts_commentary']['an_mta_sts_dns_record_was_also']
         )
 
@@ -505,15 +534,18 @@ def _build_spoofing_commentary(text, spoof_result, spf, dkim, dmarc):
 
         spoof_text = TEXT['_build_spoofing_commentary']
         if (
-            spf["assessment"] != "MISSING"
+            bool(spf["raw"])
             and dkim["assessment"] == "PRESENT"
-            and dmarc["assessment"] != "MISSING"
+            and bool(dmarc["raw"])
         ):
             text.append(spoof_text["controls_present"])
         else:
             text.append(spoof_text["controls_unconfirmed"])
 
-        text.append(spoof_text[f"dmarc_{dmarc['assessment'].lower()}"])
+        if dmarc.get("coverage_limited"):
+            text.append(spoof_text["dmarc_limited"].format(policy=dmarc["tags"]["p"]))
+        else:
+            text.append(spoof_text[f"dmarc_{dmarc['assessment'].lower()}"])
         text.append(spoof_text["delivery_cause_unconfirmed"])
 
     else:

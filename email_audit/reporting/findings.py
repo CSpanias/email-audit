@@ -58,6 +58,10 @@ def build_findings(
         if key not in FINDING_GATES:
             continue
 
+        result = next(item for item in results if item["control"] == control)
+        if result.get("dns_error") or result.get("dns_errors"):
+            continue
+
         findings.append(_finding(FINDING_GATES[key], domain))
 
     for dkim in weak_dkim_keys(results[1]):

@@ -11,13 +11,16 @@ import dns.resolver
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from email_audit.cli import _lookup_record, process_email_sample
 from email_audit.dns.dkim import assess_dkim, assess_dkim_key, assess_dkim_records, check_dkim_selectors
-from email_audit.dns.dmarc import assess_dmarc
-from email_audit.dns.mta_sts import assess_mta_sts, parse_mta_sts_policy
-from email_audit.dns.spf import assess_spf
+from email_audit.dns.dmarc import assess_dmarc, get_dmarc_record
+from email_audit.dns.lookup import DNSLookupError
+from email_audit.dns.mta_sts import assess_mta_sts, check_mta_sts, parse_mta_sts_policy
+from email_audit.dns.spf import assess_spf, get_spf_record
 from email_audit.dns.tls_rpt import assess_tls_rpt, get_tls_rpt_records
 from email_audit.reporting.commentary import build_commentary
 from email_audit.reporting.findings import build_findings
+from email_audit.reporting.executive_summary import build_executive_summary
 from email_audit.reporting.remediation import build_recommendations
 from email_audit.reporting.sureformat import export_sureformat
 
@@ -38,6 +41,138 @@ def dkim_record(bits):
     der = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
     encoded = base64.b64encode(der).decode("ascii")
     return f'"v=DKIM1; k=rsa; p={encoded[:100]}" "{encoded[100:]}"'
+
+
+class DnsAndSpfTests(unittest.TestCase):
+    def test_first_all_mechanism_controls_assessment_and_reporting(self):
+        cases = (
+            ("+all -all", "INSECURE", "+all", "Permissive (`+all`)"),
+            ("all -all", "INSECURE", "all", "Permissive (`all`)"),
+            ("~all -all", "ACCEPTABLE", "~all", "Soft Fail (`~all`)"),
+            ("-all +all", "SECURE", "-all", "Hard Fail (`-all`)"),
+            ("?all -all", "UNKNOWN", "?all", "Unknown"),
+            ("-ALL +all", "SECURE", "-all", "Hard Fail (`-all`)"),
+        )
+        for mechanisms, status, policy, config in cases:
+            with self.subTest(mechanisms=mechanisms):
+                spf = assess_spf(f"v=spf1 {mechanisms}")
+                results = [spf, assess_dkim("", "", False), assess_dmarc(""),
+                           assess_mta_sts("", parse_mta_sts_policy(""))]
+                self.assertEqual((spf["assessment"], spf["all_policy"]), (status, policy))
+                self.assertIn(f"| SPF     | {config}", build_commentary("example.test", results))
+                ids = [item["id"] for item in build_findings("example.test", results)]
+                self.assertEqual("permissive-spf" in ids, status == "INSECURE")
+
+    def test_absence_and_failed_lookups_are_distinct_for_all_dns_checks(self):
+        queries = (get_spf_record, get_dmarc_record, check_mta_sts)
+        assessors = (
+            lambda record, error: assess_spf(record, error),
+            lambda record, error: assess_dmarc(record, error),
+            lambda record, error: assess_mta_sts(record, parse_mta_sts_policy(""), error),
+        )
+        with patch("email_audit.dns.lookup.dns.resolver.resolve") as resolve:
+            for failure in (dns.exception.Timeout(), dns.resolver.NoNameservers(),
+                            UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid")):
+                for query, assess in zip(queries, assessors):
+                    with self.subTest(failure=type(failure).__name__, query=query.__name__):
+                        resolve.side_effect = failure
+                        record, error = _lookup_record(query, "example.test")
+                        self.assertEqual(assess(record, error)["assessment"], "UNKNOWN")
+                        self.assertTrue(error)
+            for absence in (dns.resolver.NXDOMAIN(), dns.resolver.NoAnswer()):
+                for query, assess in zip(queries, assessors):
+                    with self.subTest(absence=type(absence).__name__, query=query.__name__):
+                        resolve.side_effect = absence
+                        record, error = _lookup_record(query, "example.test")
+                        self.assertIsNone(error)
+                        self.assertEqual(assess(record, error)["assessment"], "MISSING")
+
+    def test_dkim_partial_failure_and_dns_failures_do_not_generate_missing_findings(self):
+        with patch("email_audit.dns.lookup.dns.resolver.resolve") as resolve:
+            resolve.side_effect = [dns.exception.Timeout(), dns.resolver.NoAnswer(),
+                                   dns.resolver.NoAnswer(), dns.resolver.NoAnswer()]
+            errors = []
+            records = check_dkim_selectors("example.test", errors)
+        dkim = assess_dkim_records(records, dns_errors=errors)
+        results = [assess_spf("", "timeout"), dkim, assess_dmarc("", "resolver failure"),
+                   assess_mta_sts("", parse_mta_sts_policy(""), "timeout"),
+                   assess_tls_rpt([], "timeout")]
+        self.assertEqual([item["assessment"] for item in results], ["UNKNOWN"] * 5)
+        self.assertIn("incomplete", dkim["breakdown"][0])
+        self.assertEqual([item["id"] for item in build_findings("example.test", results)],
+                         ["email-audit"])
+        commentary = build_commentary("example.test", results, spoof_result={"successful": True})
+        self.assertIn("| SPF     | Unknown", commentary)
+        self.assertIn("| DMARC   | Unknown", commentary)
+        self.assertIn("DNS lookup failed", commentary)
+        self.assertNotIn("an MTA-STS DNS record was", commentary)
+        self.assertNotIn("SPF, DKIM and DMARC records were identified", commentary)
+        self.assertIn("DNS lookup failures", build_recommendations(results))
+        self.assertNotIn("identified the absence", build_recommendations(results))
+        self.assertNotIn("controls were identified", build_executive_summary("example.test", results))
+
+    def test_discovered_dkim_key_is_retained_when_another_selector_lookup_fails(self):
+        answer = Mock(strings=(b"v=DKIM1; p=key",))
+        with patch("email_audit.dns.lookup.dns.resolver.resolve") as resolve:
+            resolve.side_effect = [[answer], dns.exception.Timeout(),
+                                   dns.resolver.NoAnswer(), dns.resolver.NoAnswer()]
+            errors = []
+            records = check_dkim_selectors("example.test", errors)
+        dkim = assess_dkim_records(records, dns_errors=errors)
+        self.assertEqual(dkim["assessment"], "PRESENT")
+        self.assertEqual(len(errors), 1)
+        results = [assess_spf("v=spf1 -all"), dkim, assess_dmarc("v=DMARC1; p=reject"),
+                   assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy("mode: enforce"))]
+        self.assertIn("discovery was incomplete", build_commentary("example.test", results))
+        self.assertIn("DNS lookup failures", build_recommendations(results))
+
+    def test_sample_selector_lookup_failure_preserves_discovered_key(self):
+        records = [("default", "v=DKIM1; p=key", True)]
+        results = [assess_spf("v=spf1 -all"), assess_dkim_records(records)]
+        errors = []
+        auth = {"dkim_selector": "sample", "dkim": "pass"}
+        with patch("email_audit.cli.parse_eml_file", return_value=auth), \
+             patch("email_audit.cli.check_dkim_dns", side_effect=DNSLookupError("timeout")):
+            self.assertEqual(process_email_sample("example.test", "sample.eml",
+                                                  results, records, errors), auth)
+        self.assertEqual(results[1]["assessment"], "PRESENT")
+        self.assertEqual(results[1]["selector"], "default")
+        self.assertEqual(results[1]["dns_errors"], ["timeout"])
+        self.assertNotIn("supplied email sample", results[1]["impact"])
+
+
+class DmarcCoverageTests(unittest.TestCase):
+    def test_policy_coverage_changes_assessment(self):
+        cases = (
+            ("p=reject", "SECURE", False),
+            ("p=reject; pct=100", "SECURE", False),
+            ("p=reject; pct=0", "ACCEPTABLE", True),
+            ("p=reject; pct=99", "ACCEPTABLE", True),
+            ("p=quarantine; pct=100", "ACCEPTABLE", False),
+            ("p=quarantine; pct=0", "INSECURE", True),
+            ("p=quarantine; pct=1", "INSECURE", True),
+            ("p=none; pct=0", "INSECURE", False),
+            ("p=reject; t=y", "ACCEPTABLE", True),
+            ("p=quarantine; t=y", "INSECURE", True),
+            ("p=reject; t=n", "SECURE", False),
+            ("p=none; t=y", "INSECURE", False),
+            ("p=REJECT; PCT = 50", "ACCEPTABLE", True),
+        )
+        for tags, status, limited in cases:
+            with self.subTest(tags=tags):
+                result = assess_dmarc(f"v=DMARC1; {tags}")
+                self.assertEqual(result["assessment"], status)
+                self.assertEqual(result["coverage_limited"], limited)
+
+    def test_malformed_and_duplicate_coverage_tags_are_inconclusive(self):
+        for tags in ("pct=-1", "pct=101", "pct=1.5", "pct=", "pct=0000",
+                     "pct=0; pct=100", "t=maybe", "t=y; t=n"):
+            with self.subTest(tags=tags):
+                result = assess_dmarc(f"v=DMARC1; p=reject; {tags}")
+                self.assertEqual(result["assessment"], "UNKNOWN")
+                self.assertTrue(result["coverage_errors"])
+                self.assertFalse(result["coverage_limited"])
+                self.assertIn("could not be determined", result["impact"])
 
 
 class DkimKeyTests(unittest.TestCase):
@@ -123,7 +258,7 @@ class TlsRptTests(unittest.TestCase):
                 self.assertEqual(assess_tls_rpt(records)["assessment"], "INVALID")
 
     def test_dns_failure_is_inconclusive_and_chunks_are_joined(self):
-        with patch("email_audit.dns.tls_rpt.dns.resolver.resolve") as resolve:
+        with patch("email_audit.dns.lookup.dns.resolver.resolve") as resolve:
             resolve.return_value = [Mock(strings=(b"v=TLSRPTv1;", b"rua=mailto:a@example.test"))]
             records, error = get_tls_rpt_records("example.test")
             self.assertIsNone(error)

@@ -89,7 +89,8 @@ _TAG_MEANINGS = {
         "p": "Policy for messages that fail authentication",
         "sp": "Policy for subdomains",
         "np": "Policy for non-existent subdomains",
-        "pct": "Percentage of messages to which the policy applies",
+        "pct": "Legacy policy sampling percentage",
+        "t": "DMARC policy testing flag",
         "rua": "Destination for aggregate reports",
         "ruf": "Destination for failure reports",
         "fo": "Conditions for generating failure reports",
@@ -188,12 +189,14 @@ def print_assessment(result):
     observations = result["breakdown"] if (
         not result["raw"] or result["control"] == "DKIM"
         or result["assessment"] in {"UNKNOWN", "INVALID"}
+        or result.get("coverage_limited")
+        or result.get("coverage_errors")
     ) else []
     if observations:
         console.print("Observations", style="bold")
         for observation in observations:
             console.print(Text(f"  - {observation}"), overflow="fold")
-    if result["assessment"] in {"UNKNOWN", "INVALID"} and result["impact"]:
+    if (result["assessment"] in {"UNKNOWN", "INVALID"} or result.get("coverage_limited")) and result["impact"]:
         console.print(Text(f"  - {result['impact']}"), overflow="fold")
 
 

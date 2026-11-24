@@ -13,6 +13,8 @@ retrieves the MTA-STS policy over HTTPS. An interactive terminal shows progress
 through these five checks; redirected output does not include a progress bar.
 Failure to discover a common DKIM selector does not establish that DKIM is
 absent.
+DNS timeouts, resolver failures and undecodable responses are inconclusive,
+not evidence that a record is missing. Retry the affected checks.
 
 ## Email sample
 

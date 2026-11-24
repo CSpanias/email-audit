@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.serialization import load_der_public_key
 
 from email_audit.constants import COMMON_DKIM_SELECTORS
-from email_audit.utils import run_command
+from email_audit.dns.lookup import DNSLookupError, get_txt_records
 
 
 def assess_dkim_key(record):
@@ -70,12 +70,7 @@ def check_dkim_dns(domain, selector=None):
 
     for selector in selectors:
 
-        output = run_command([
-            "dig",
-            "+short",
-            f"{selector}._domainkey.{domain}",
-            "TXT"
-        ])
+        output = "\n".join(get_txt_records(f"{selector}._domainkey.{domain}"))
 
         if not output:
             continue
@@ -84,32 +79,36 @@ def check_dkim_dns(domain, selector=None):
         if "v=DKIM1" in output:
             return selector, output, True
 
-        # If output returned, but not DKIM record -> possible CNAME target
-        target = output.strip().rstrip(".")
-        dkim_record = run_command(["dig", "+short", target, "TXT"])
-
-        if "v=DKIM1" in dkim_record:
-            return selector, dkim_record, True
-
         return selector, output, False
 
     return "", "", False
 
 
-def check_dkim_selectors(domain):
+def check_dkim_selectors(domain, errors=None):
     """Query every common selector and retain each non-empty response."""
     records = []
     for selector in COMMON_DKIM_SELECTORS:
-        found_selector, record, found = check_dkim_dns(domain, selector)
+        try:
+            found_selector, record, found = check_dkim_dns(domain, selector)
+        except DNSLookupError as exc:
+            if errors is None:
+                raise
+            errors.append(str(exc))
+            continue
         if record:
             records.append((found_selector, record, found))
     return records
 
 
-def assess_dkim_records(records, auth_results=None, selected=None):
+def assess_dkim_records(records, auth_results=None, selected=None, dns_errors=None):
     """Assess the primary selector while retaining evidence from all discovered keys."""
     primary = selected if selected is not None else (records[0] if records else ("", "", False))
     result = assess_dkim(*primary, auth_results)
+    if dns_errors:
+        result["dns_errors"] = list(dns_errors)
+        if not primary[1]:
+            result["breakdown"] = ["DKIM selector discovery was incomplete"]
+        result["breakdown"].extend(f"DNS lookup failed: {error}" for error in dns_errors)
     observations = []
     by_selector = {selector: (selector, record, found) for selector, record, found in records}
     if selected and selected[1] and (selected[2] or selected[0] not in by_selector):

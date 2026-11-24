@@ -1,6 +1,6 @@
 # Installation
 
-Email Audit requires Python 3.10 or later and `dig` on `PATH`. DNS queries and
+Email Audit requires Python 3.10 or later. DNS queries and
 MTA-STS policy retrieval require network access.
 
 ## Install with uv

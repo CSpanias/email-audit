@@ -24,6 +24,14 @@ In enforcement mode, participating sending servers require a valid TLS
 connection to an authorised MX host. `max_age` controls how long a policy is
 cached. Testing mode does not enforce delivery requirements.
 
+| Mode | Behaviour | Use case |
+|---|---|---|
+| `none` | Policy published but not enforced | Initial deployment |
+| `testing` | Monitor failures without enforcing requirements | Validation and monitoring |
+| `enforce` | Require TLS and trusted `MX` hosts for delivery | Production deployment |
+
+TLS-RPT can provide failure reports when a reporting policy is configured.
+
 ## Limitations
 
 This check is not a full MTA-STS or TLS validator. It does not validate all

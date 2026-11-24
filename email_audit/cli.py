@@ -36,6 +36,7 @@ from email_audit.dns.mta_sts import (
 )
 
 from email_audit.dns.tls_rpt import assess_tls_rpt, get_tls_rpt_records
+from email_audit.dns.lookup import DNSLookupError
 
 from email_audit.email.eml import (
     parse_eml_file,
@@ -130,7 +131,7 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def process_email_sample(domain, email_file, results, dkim_records):
+def process_email_sample(domain, email_file, results, dkim_records, dkim_errors):
     """
     Parse a supplied email sample and update assessment results.
     """
@@ -147,15 +148,13 @@ def process_email_sample(domain, email_file, results, dkim_records):
 
         if auth_results["dkim_selector"]:
 
-            dkim_selector, dkim_record, dkim_found = (
-                check_dkim_dns(
-                    domain,
-                    auth_results["dkim_selector"],
-                )
-            )
-
+            try:
+                selected = check_dkim_dns(domain, auth_results["dkim_selector"])
+            except DNSLookupError as exc:
+                dkim_errors.append(str(exc))
+                selected = None
             results[1] = assess_dkim_records(
-                dkim_records, auth_results, (dkim_selector, dkim_record, dkim_found)
+                dkim_records, auth_results if selected else None, selected, dkim_errors
             )
 
         return auth_results
@@ -169,6 +168,13 @@ def process_email_sample(domain, email_file, results, dkim_records):
 def main():
     with ExitStack() as cleanup:
         _run_assessment(cleanup)
+
+
+def _lookup_record(query, domain):
+    try:
+        return query(domain), None
+    except DNSLookupError as exc:
+        return "", str(exc)
 
 
 def _run_assessment(cleanup):
@@ -197,14 +203,15 @@ def _run_assessment(cleanup):
         TimeElapsedColumn(), console=console, transient=True, disable=not console.is_terminal,
     ) as progress:
         task = progress.add_task("Checking SPF", total=5)
-        spf_record = get_spf_record(args.domain)
+        spf_record, spf_error = _lookup_record(get_spf_record, args.domain)
         progress.update(task, advance=1, description="Checking DKIM", refresh=True)
-        dkim_records = check_dkim_selectors(args.domain)
+        dkim_errors = []
+        dkim_records = check_dkim_selectors(args.domain, dkim_errors)
         progress.update(task, advance=1, description="Checking DMARC", refresh=True)
-        dmarc_record = get_dmarc_record(args.domain)
+        dmarc_record, dmarc_error = _lookup_record(get_dmarc_record, args.domain)
         progress.update(task, advance=1, description="Checking MTA-STS", refresh=True)
-        mta_record = check_mta_sts(args.domain)
-        mta_policy_raw = get_mta_sts_policy(args.domain)
+        mta_record, mta_error = _lookup_record(check_mta_sts, args.domain)
+        mta_policy_raw = get_mta_sts_policy(args.domain) if mta_error is None else ""
         mta_policy = parse_mta_sts_policy(mta_policy_raw)
         progress.update(task, advance=1, description="Checking TLS-RPT", refresh=True)
         tls_rpt_records, tls_rpt_error = get_tls_rpt_records(args.domain)
@@ -214,12 +221,13 @@ def _run_assessment(cleanup):
     # Initial Assessment
     # -----------------------------------------------------------------------
     results = [
-        assess_spf(spf_record),
-        assess_dkim_records(dkim_records, auth_results),
-        assess_dmarc(dmarc_record),
+        assess_spf(spf_record, spf_error),
+        assess_dkim_records(dkim_records, auth_results, dns_errors=dkim_errors),
+        assess_dmarc(dmarc_record, dmarc_error),
         assess_mta_sts(
             mta_record,
             mta_policy,
+            mta_error,
         ),
         assess_tls_rpt(tls_rpt_records, tls_rpt_error),
     ]
@@ -233,6 +241,7 @@ def _run_assessment(cleanup):
             args.email,
             results,
             dkim_records,
+            dkim_errors,
         )
 
     # --------------------------------------------------------------------------

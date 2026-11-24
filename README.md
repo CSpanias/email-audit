@@ -96,7 +96,6 @@ email-audit -D <domain> --spoof <recipient>
 ### Core
 
 * Python 3.10 or later
-* dig
 
 ### Optional
 

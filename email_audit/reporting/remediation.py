@@ -38,7 +38,7 @@ def build_references(results, auth_results=None, spoof_result=None):
     if weak_dkim_keys(dkim):
         refs.add("dkim_crypto")
 
-    if dmarc["assessment"] in ["MISSING", "UNKNOWN"]:
+    if dmarc["assessment"] in ["MISSING", "UNKNOWN"] or dmarc.get("coverage_limited"):
         refs.add("dmarc")
         refs.add("dmarc_org")
 
@@ -82,6 +82,10 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
     mta = results[3]
     tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
     additional_recommendations = []
+    if any(result.get("dns_error") or result.get("dns_errors") for result in results) or (
+        tls_rpt and tls_rpt["assessment"] == "UNKNOWN"
+    ):
+        additional_recommendations.append(ADDITIONAL["dns_retry_recommendation"])
     for key in weak_dkim_keys(dkim):
         additional_recommendations.append(
             ADDITIONAL["weak_dkim_recommendation"].format(selector=key["selector"])
@@ -94,6 +98,7 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
     all_missing = (
             spf["assessment"] == "MISSING"
             and dkim["assessment"] == "UNKNOWN"
+            and not dkim.get("dns_errors")
             and dmarc["assessment"] == "MISSING"
             and mta["assessment"] == "MISSING"
         )
@@ -105,10 +110,12 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
 
     elif spf["assessment"] == "INSECURE":
         recommendations.append(
-            TEXT['build_recommendations']['replace_the_all_spf_mechanism_with_a']
+            TEXT['build_recommendations']['replace_the_all_spf_mechanism_with_a'].format(
+                policy=spf["all_policy"]
+            )
         )
 
-    if dkim["assessment"] == "UNKNOWN":
+    if dkim["assessment"] == "UNKNOWN" and not dkim.get("dns_errors"):
         recommendations.append(
             TEXT['build_recommendations']['configure_dkim_signing_and_ensure_the_associated']
         )
@@ -118,12 +125,17 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
             TEXT['build_recommendations']['implement_dmarc_with_an_appropriate_reporting_and']
         )
 
+    elif dmarc.get("coverage_limited"):
+        recommendations.append(ADDITIONAL["dmarc_limited_recommendation"])
+    elif dmarc.get("coverage_errors"):
+        recommendations.append(ADDITIONAL["dmarc_invalid_coverage_recommendation"])
+
     if mta["assessment"] == "MISSING":
         recommendations.append(
             TEXT['build_recommendations']['deploy_mta_sts_to_strengthen_smtp_transport']
         )
 
-    elif mta["assessment"] == "UNKNOWN":
+    elif mta["assessment"] == "UNKNOWN" and not mta.get("dns_error"):
         recommendations.append(
             TEXT['build_recommendations']['review_the_published_mta_sts_configuration_and']
         )

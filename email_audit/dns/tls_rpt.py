@@ -3,19 +3,15 @@
 import re
 from urllib.parse import urlsplit
 
-import dns.exception
-import dns.resolver
+from email_audit.dns.lookup import DNSLookupError, get_txt_records
 
 
 def get_tls_rpt_records(domain):
     """Return decoded TXT records, or an explanatory error for inconclusive DNS."""
     try:
-        answers = dns.resolver.resolve(f"_smtp._tls.{domain}", "TXT", lifetime=10, search=False)
-        return ["".join(part.decode("utf-8") for part in answer.strings) for answer in answers], None
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-        return [], None
-    except (dns.exception.DNSException, UnicodeDecodeError) as exc:
-        return [], str(exc) or type(exc).__name__
+        return get_txt_records(f"_smtp._tls.{domain}"), None
+    except DNSLookupError as exc:
+        return [], str(exc)
 
 
 def _valid_uri(value):

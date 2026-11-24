@@ -110,6 +110,18 @@ class CliTests(unittest.TestCase):
         self.assertIn("TLS reporting configuration could not be determined.", output.getvalue())
         self.assertNotIn("Assessment:", output.getvalue())
 
+    def test_dmarc_reduced_coverage_and_invalid_values_are_visible(self):
+        for tags, expected in (
+            ("p=reject; pct=0", "less restrictively"),
+            ("p=reject; t=y", "less restrictively"),
+            ("p=reject; pct=101", "Invalid DMARC pct value"),
+        ):
+            with self.subTest(tags=tags):
+                output = io.StringIO()
+                with patch("email_audit.output.console.console", Console(file=output, width=120)):
+                    print_assessment(assess_dmarc(f"v=DMARC1; {tags}"))
+                self.assertIn(expected, output.getvalue())
+
     def test_spf_fields_are_separate_and_explain_qualifiers(self):
         record = "v=spf1 include:mail.example.test ip4:192.0.2.0/24 ~all"
         output = io.StringIO()
@@ -234,6 +246,37 @@ class CliTests(unittest.TestCase):
             self.assertIn(f"{prefix}.html", output.getvalue())
             self.assertTrue(output.getvalue().startswith("\n"))
             self.assertNotIn("Overall Security Posture", output.getvalue())
+
+    def test_dns_failures_remain_inconclusive_in_exported_report_and_findings(self):
+        import dns.exception
+
+        with contextlib.ExitStack() as stack:
+            directory = stack.enter_context(tempfile.TemporaryDirectory())
+            old_cwd = os.getcwd()
+            stack.callback(os.chdir, old_cwd)
+            os.chdir(directory)
+            stack.enter_context(patch("sys.argv", ["email-audit", "-D", "example.test"]))
+            stack.enter_context(patch(
+                "email_audit.dns.lookup.dns.resolver.resolve",
+                side_effect=dns.exception.Timeout("DNS timed out"),
+            ))
+            policy = stack.enter_context(patch.object(cli, "get_mta_sts_policy"))
+            output = stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+
+            cli.main()
+
+            findings_path = next(Path("email-audit").glob("*.json"))
+            report_path = next(Path("email-audit").glob("*.html"))
+            with findings_path.open(encoding="utf-8") as handle:
+                findings = json.load(handle)["findings"]
+            report = report_path.read_text(encoding="utf-8")
+            self.assertEqual([finding["id"] for finding in findings], ["email-audit"])
+            self.assertIn("DNS lookup failed", output.getvalue())
+            self.assertIn("DNS lookup failures", report)
+            self.assertIn("DKIM support could not be confirmed", report)
+            self.assertNotIn("No SPF record was identified", report)
+            self.assertNotIn("No DMARC policy was identified", report)
+            policy.assert_not_called()
 
     def test_csacyber_writes_xml_and_html_instead_of_json(self):
         with contextlib.ExitStack() as stack:

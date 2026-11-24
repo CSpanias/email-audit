@@ -12,9 +12,9 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
     summary = [TEXT["introduction"].format(domain=domain)]
 
     controls_present = (
-        spf["assessment"] != "MISSING"
+        bool(spf["raw"])
         and dkim["assessment"] == "PRESENT"
-        and dmarc["assessment"] != "MISSING"
+        and bool(dmarc["raw"])
     )
     authentication = (
         [auth_results.get(control) for control in ("spf", "dkim", "dmarc")]
@@ -34,7 +34,9 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
         evidence.append(TEXT["sample_incomplete"])
     else:
         evidence.append(TEXT["sample_not_supplied"])
-    if dmarc["assessment"] == "INSECURE":
+    if dmarc.get("coverage_limited"):
+        evidence.append(TEXT["sender_protection_limited"])
+    elif dmarc["assessment"] == "INSECURE":
         evidence.append(TEXT["sender_protection_monitoring"])
     elif spf["assessment"] == "INSECURE":
         evidence.append(TEXT["sender_protection_weak"])
@@ -75,6 +77,7 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
     elif (
         issues or not controls_present or "fail" in authentication
         or any(control["assessment"] in {"INSECURE", "UNKNOWN"} for control in (spf, dmarc))
+        or dmarc.get("coverage_limited")
     ):
         summary.append(TEXT["conclusion_improvements"])
     else:
