@@ -208,7 +208,10 @@ def print_completion_summary(
     console.print(Text.assemble(("[+]", "green"), " Assessment Complete"))
     console.print()
     count = len(findings) if exported_count is None else exported_count
-    console.print(f"    Findings Exported : {count}", markup=False)
-    console.print(f"    {output_format} Output       : {findings_file}", markup=False)
-    console.print(f"    HTML Output       : {html_file}", markup=False)
+    for label, value in (
+        ("Findings Exported", count),
+        (f"{output_format} Output", findings_file),
+        ("HTML Output", html_file),
+    ):
+        console.print(f"    {label:<17} : {value}", markup=False)
     console.print()

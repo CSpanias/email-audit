@@ -21,12 +21,26 @@ from email_audit.dns.dmarc import assess_dmarc
 from email_audit.dns.mta_sts import assess_mta_sts, parse_mta_sts_policy
 from email_audit.dns.spf import assess_spf
 from email_audit.dns.tls_rpt import assess_tls_rpt
-from email_audit.output.console import print_assessment
+from email_audit.output.console import print_assessment, print_completion_summary
 from email_audit.output.evidence import report_configuration_validation
 from email_audit.spoofing import spoof
 
 
 class CliTests(unittest.TestCase):
+    def test_completion_summary_aligns_labels_for_both_export_formats(self):
+        for output_format in ("JSON", "XML"):
+            with self.subTest(output_format=output_format):
+                output = io.StringIO()
+                with patch("email_audit.output.console.console", Console(file=output, width=120)):
+                    print_completion_summary(
+                        [], "email-audit/example.findings", "email-audit/example.html",
+                        output_format=output_format, exported_count=5,
+                    )
+                lines = [line for line in output.getvalue().splitlines() if " : " in line]
+                self.assertEqual(len(lines), 3)
+                self.assertEqual(len({line.index(" : ") for line in lines}), 1)
+                self.assertIn(f"{output_format} Output", lines[1])
+
     def test_help_shows_existing_options_and_examples(self):
         result = subprocess.run(
             [sys.executable, "-m", "email_audit.cli", "--help"],
