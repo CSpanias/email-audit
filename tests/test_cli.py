@@ -356,6 +356,56 @@ class CliTests(unittest.TestCase):
                     findings.call_args.args[3]["successful"], assessment == "MESSAGE SUBMITTED"
                 )
 
+    def test_tool_started_relay_is_cleaned_up_after_delivery_and_on_report_failure(self):
+        for fails in (False, True):
+            with self.subTest(report_fails=fails), contextlib.ExitStack() as stack:
+                events = []
+                stack.enter_context(patch("sys.argv", [
+                    "email-audit", "-D", "example.test", "--spoof", "recipient@example.test"
+                ]))
+                stack.enter_context(patch.object(cli.Path, "mkdir"))
+                for name in (
+                    "get_spf_record", "get_dmarc_record", "check_mta_sts",
+                    "get_mta_sts_policy", "parse_mta_sts_policy", "assess_spf",
+                    "assess_dkim_records", "assess_dmarc", "assess_mta_sts",
+                    "print_info", "print_assessment", "build_recommendations",
+                    "export_json", "report_spoof",
+                ):
+                    stack.enter_context(patch.object(cli, name))
+                stack.enter_context(patch.object(cli, "check_dkim_selectors", return_value=[]))
+                stack.enter_context(patch.object(cli, "get_tls_rpt_records", return_value=([], None)))
+                stack.enter_context(patch.object(cli, "build_findings", return_value=[]))
+                stack.enter_context(patch.object(cli, "build_commentary"))
+
+                def perform(domain, recipient, cleanup):
+                    cleanup.callback(events.append, "stop")
+                    events.append("start")
+                    return {"assessment": "MESSAGE SUBMITTED"}
+
+                def report(*args, **kwargs):
+                    events.append("report")
+                    if fails:
+                        raise RuntimeError("report failed")
+                    return "report.html"
+
+                stack.enter_context(patch.object(cli, "perform_spoof_test", side_effect=perform))
+                stack.enter_context(patch.object(cli, "export_html", side_effect=report))
+                stack.enter_context(patch.object(
+                    cli, "print_completion_summary", side_effect=lambda *a, **k: events.append("complete")
+                ))
+                stack.enter_context(patch(
+                    "builtins.input", side_effect=lambda *args: events.append("delivery") or "yes"
+                ))
+                if fails:
+                    with self.assertRaisesRegex(RuntimeError, "report failed"):
+                        cli.main()
+                else:
+                    cli.main()
+                expected = ["start", "delivery", "report", "stop"]
+                if not fails:
+                    expected.append("complete")
+                self.assertEqual(events, expected)
+
 
 class SpoofRelayTests(unittest.TestCase):
     def test_relay_check_requires_an_smtp_greeting(self):
@@ -367,9 +417,12 @@ class SpoofRelayTests(unittest.TestCase):
 
     def test_available_relay_needs_no_start_prompt(self):
         with patch.object(spoof, "smtp_server_running", return_value=True), \
-                patch("builtins.input") as prompt:
-            self.assertIsNone(spoof.ensure_local_smtp())
+                patch("builtins.input") as prompt, \
+                patch.object(spoof.subprocess, "run") as service, \
+                contextlib.ExitStack() as cleanup:
+            self.assertIsNone(spoof.ensure_local_smtp(cleanup))
         prompt.assert_not_called()
+        service.assert_not_called()
 
     def test_declined_start_skips_sending(self):
         with contextlib.ExitStack() as stack:
@@ -381,7 +434,7 @@ class SpoofRelayTests(unittest.TestCase):
             stack.enter_context(patch("builtins.input", return_value="n"))
             start = stack.enter_context(patch.object(spoof.subprocess, "run"))
             send = stack.enter_context(patch.object(spoof, "run_command"))
-            result = spoof.perform_spoof_test("example.test", "recipient@example.test")
+            result = spoof.perform_spoof_test("example.test", "recipient@example.test", stack)
         self.assertEqual(result["assessment"], "LOCAL SMTP RELAY NOT AVAILABLE")
         self.assertIn("skipped", result["impact"])
         start.assert_not_called()
@@ -400,26 +453,38 @@ class SpoofRelayTests(unittest.TestCase):
                     spoof, "which", side_effect=lambda name: f"/usr/bin/{name}"
                 ))
                 stack.enter_context(patch("builtins.input", return_value="yes"))
-                start = stack.enter_context(patch.object(
-                    spoof.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+                service = stack.enter_context(patch.object(
+                    spoof.subprocess, "run", side_effect=[
+                        SimpleNamespace(returncode=3, stdout="", stderr=""),
+                        SimpleNamespace(returncode=0),
+                        SimpleNamespace(returncode=0),
+                        SimpleNamespace(returncode=3, stdout="", stderr=""),
+                    ]
                 ))
                 send = stack.enter_context(patch.object(spoof, "run_command", return_value="queued as 1"))
-                result = spoof.perform_spoof_test("example.test", "recipient@example.test")
-                start.assert_called_once_with(
-                    ["/usr/bin/sudo", "/usr/bin/service", "postfix", "start"], check=False
-                )
+                with contextlib.ExitStack() as cleanup:
+                    result = spoof.perform_spoof_test("example.test", "recipient@example.test", cleanup)
+                    self.assertEqual(service.call_count, 2)
                 if responds:
                     self.assertEqual(result["assessment"], "MESSAGE SUBMITTED")
                     self.assertIn("Subject: Controlled Spoofing Assessment", send.call_args.args[0])
                 else:
                     self.assertIn("no SMTP service responded", result["impact"])
                     send.assert_not_called()
+                self.assertEqual(
+                    [call.args[0][-1] for call in service.call_args_list],
+                    ["status", "start", "stop", "status"],
+                )
+                self.assertEqual(
+                    service.call_args_list[1].args[0],
+                    ["/usr/bin/sudo", "/usr/bin/service", "postfix", "start"],
+                )
 
     def test_noninteractive_missing_relay_does_not_prompt(self):
         with patch.object(spoof, "smtp_server_running", return_value=False), \
                 patch.object(spoof.sys.stdin, "isatty", return_value=False), \
-                patch("builtins.input") as prompt:
-            self.assertIn("Start a local SMTP relay", spoof.ensure_local_smtp())
+                patch("builtins.input") as prompt, contextlib.ExitStack() as cleanup:
+            self.assertIn("Start a local SMTP relay", spoof.ensure_local_smtp(cleanup))
         prompt.assert_not_called()
 
     def test_failed_service_start_is_reported(self):
@@ -430,10 +495,75 @@ class SpoofRelayTests(unittest.TestCase):
             stack.enter_context(patch.object(spoof.os, "geteuid", return_value=0, create=True))
             stack.enter_context(patch.object(spoof, "which", return_value="/usr/bin/service"))
             stack.enter_context(patch("builtins.input", return_value="y"))
-            stack.enter_context(patch.object(
-                spoof.subprocess, "run", return_value=SimpleNamespace(returncode=1)
+            service = stack.enter_context(patch.object(
+                spoof.subprocess, "run", side_effect=[
+                    SimpleNamespace(returncode=3, stdout="", stderr=""),
+                    SimpleNamespace(returncode=1),
+                    SimpleNamespace(returncode=0),
+                    SimpleNamespace(returncode=3, stdout="", stderr=""),
+                ]
             ))
-            self.assertIn("startup failed (exit code 1)", spoof.ensure_local_smtp())
+            with contextlib.ExitStack() as cleanup:
+                self.assertIn("startup failed (exit code 1)", spoof.ensure_local_smtp(cleanup))
+            self.assertEqual(
+                [call.args[0][-1] for call in service.call_args_list],
+                ["status", "start", "stop", "status"],
+            )
+
+    def test_running_postfix_without_local_listener_is_not_stopped(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(spoof, "smtp_server_running", return_value=False))
+            stack.enter_context(patch.object(spoof.sys.stdin, "isatty", return_value=True))
+            stack.enter_context(patch.object(spoof.sys, "platform", "linux"))
+            stack.enter_context(patch.object(spoof.os, "geteuid", return_value=0, create=True))
+            stack.enter_context(patch.object(spoof, "which", return_value="/usr/bin/service"))
+            stack.enter_context(patch("builtins.input", return_value="y"))
+            service = stack.enter_context(patch.object(
+                spoof.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+            ))
+            with contextlib.ExitStack() as cleanup:
+                self.assertIn("already running", spoof.ensure_local_smtp(cleanup))
+            self.assertEqual([call.args[0][-1] for call in service.call_args_list], ["status"])
+
+    def test_cleanup_runs_if_sending_raises(self):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(
+                spoof, "smtp_server_running", side_effect=[False, True]
+            ))
+            stack.enter_context(patch.object(spoof.sys.stdin, "isatty", return_value=True))
+            stack.enter_context(patch.object(spoof.sys, "platform", "linux"))
+            stack.enter_context(patch.object(spoof.os, "geteuid", return_value=0, create=True))
+            stack.enter_context(patch.object(spoof, "which", return_value="/usr/bin/service"))
+            stack.enter_context(patch("builtins.input", return_value="y"))
+            service = stack.enter_context(patch.object(
+                spoof.subprocess, "run", side_effect=[
+                    SimpleNamespace(returncode=3, stdout="", stderr=""),
+                    SimpleNamespace(returncode=0),
+                    SimpleNamespace(returncode=0),
+                    SimpleNamespace(returncode=3, stdout="", stderr=""),
+                ]
+            ))
+            stack.enter_context(patch.object(spoof, "run_command", side_effect=RuntimeError("send failed")))
+            with self.assertRaisesRegex(RuntimeError, "send failed"):
+                with contextlib.ExitStack() as cleanup:
+                    spoof.perform_spoof_test("example.test", "recipient@example.test", cleanup)
+            self.assertEqual(
+                [call.args[0][-1] for call in service.call_args_list],
+                ["status", "start", "stop", "status"],
+            )
+
+    def test_cleanup_failure_is_reported(self):
+        with patch.object(spoof.subprocess, "run", return_value=SimpleNamespace(returncode=1)):
+            with self.assertRaisesRegex(RuntimeError, "Postfix stop failed"):
+                spoof._stop_postfix(["service", "postfix"])
+
+    def test_cleanup_reports_when_postfix_is_still_running(self):
+        with patch.object(spoof.subprocess, "run", side_effect=[
+            SimpleNamespace(returncode=0),
+            SimpleNamespace(returncode=0, stdout="still running", stderr=""),
+        ]):
+            with self.assertRaisesRegex(RuntimeError, "Could not confirm Postfix stopped.*still running"):
+                spoof._stop_postfix(["service", "postfix"])
 
 
 if __name__ == "__main__":

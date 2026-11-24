@@ -132,7 +132,9 @@ commentary:
 executive_summary:
   introduction: An email security review was performed against the {domain} domain to assess the
     effectiveness of controls protecting email communications.
-  controls_present: Controls intended to verify the origin of email were identified.
+  controls_present: The domain had controls in place to help verify the origin of email.
+  controls_present_sample_passed: Email verification controls were identified, and the supplied email
+    passed the checks recorded by the receiving system.
   controls_unconfirmed: Not all controls intended to verify the origin of email could be confirmed.
   sample_passed: The checks recorded for the supplied email passed, indicating that the receiving system
     verified that message.
@@ -140,9 +142,9 @@ executive_summary:
   sample_incomplete: The supplied email did not contain enough information to determine the outcome of
     all relevant checks.
   sample_not_supplied: No email sample was supplied to provide evidence of these checks in practice.
-  sender_protection_monitoring: The domain's policy does not request that messages failing verification
-    be blocked.
-  sender_protection_weak: Some sender verification settings are permissive, which could increase the risk
+  sender_protection_monitoring: However, the domain's policy did not request that recipients block
+    messages that failed verification.
+  sender_protection_weak: Some sender verification settings were permissive, which could increase the risk
     of impersonation.
   sender_protection_unconfirmed: The effectiveness of some sender verification settings could not be
     confirmed.
@@ -153,16 +155,18 @@ executive_summary:
     This does not rule out fraudulent messages reaching other recipients.
   additional_issues: The assessment also identified opportunities to strengthen the protection of email
     communications.
-  transport_missing: Without additional protection for messages in transit, they may be more exposed
-    to interception or alteration.
-  transport_not_enforced: Additional protection for messages in transit is not fully enforced, which may
+  transport_missing: Additional protection for messages in transit was not identified, which may increase
+    their exposure to interception or alteration.
+  transport_not_enforced: Additional protection for messages in transit was not fully enforced, which may
     increase their exposure to interception or alteration.
   transport_unconfirmed: Additional protection for messages in transit could not be confirmed, limiting
     assurance that they are protected from interception or alteration.
-  weak_signing_key: A weak verification safeguard may undermine confidence in the authenticity and
-    integrity of messages.
-  delivery_reporting_unavailable: Limited reporting of delivery security issues could delay their
-    detection and resolution.
+  weak_signing_key: A weak verification safeguard was identified, which may undermine confidence in the
+    authenticity and integrity of messages.
+  delivery_reporting_missing: Reporting of email delivery security issues was not identified, which could
+    delay their detection and resolution.
+  delivery_reporting_invalid: Reporting of email delivery security issues was not configured correctly,
+    which could delay their detection and resolution.
   delivery_reporting_unconfirmed: Reporting of delivery security issues could not be confirmed, limiting
     confidence that such issues would be identified promptly.
   conclusion_impersonation: Overall, the assessment highlighted opportunities to strengthen email

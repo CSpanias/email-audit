@@ -36,7 +36,9 @@ local SMTP relay. If no relay responds and the session is interactive, the
 tool can offer to start Postfix on Linux after confirmation; this may require
 sudo. If startup is declined, unavailable or unsuccessful, the spoofing test is
 skipped. Submission is not proof of delivery: confirm delivery at the recipient
-when prompted.
+when prompted. Postfix started by the tool is stopped when the assessment ends,
+including on errors; an already-running relay is left untouched. Messages still
+queued at that point may not be delivered until Postfix is started again.
 
 ## Output
 

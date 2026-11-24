@@ -20,11 +20,14 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
         [auth_results.get(control) for control in ("spf", "dkim", "dmarc")]
         if auth_results else []
     )
-    evidence = [
-        TEXT["controls_present"] if controls_present else TEXT["controls_unconfirmed"]
-    ]
-    if authentication and all(result == "pass" for result in authentication):
-        evidence.append(TEXT["sample_passed"])
+    sample_passed = authentication and all(result == "pass" for result in authentication)
+    if controls_present and sample_passed:
+        evidence = [TEXT["controls_present_sample_passed"]]
+    else:
+        evidence = [TEXT["controls_present"] if controls_present else TEXT["controls_unconfirmed"]]
+    if sample_passed:
+        if not controls_present:
+            evidence.append(TEXT["sample_passed"])
     elif "fail" in authentication:
         evidence.append(TEXT["sample_failed"])
     elif auth_results:
@@ -57,8 +60,10 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
         issues.append(TEXT["weak_signing_key"])
 
     tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
-    if tls_rpt and tls_rpt["assessment"] in ("MISSING", "INVALID"):
-        issues.append(TEXT["delivery_reporting_unavailable"])
+    if tls_rpt and tls_rpt["assessment"] == "MISSING":
+        issues.append(TEXT["delivery_reporting_missing"])
+    elif tls_rpt and tls_rpt["assessment"] == "INVALID":
+        issues.append(TEXT["delivery_reporting_invalid"])
     elif tls_rpt and tls_rpt["assessment"] == "UNKNOWN":
         issues.append(TEXT["delivery_reporting_unconfirmed"])
 

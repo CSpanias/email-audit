@@ -40,7 +40,31 @@ def smtp_server_running():
         return False
 
 
-def ensure_local_smtp():
+def _postfix_status(command):
+    return subprocess.run(
+        [*command, "status"], capture_output=True, text=True, check=False
+    )
+
+
+def _stop_postfix(command):
+    """Stop and verify a Postfix service started by this assessment."""
+    try:
+        stopped = subprocess.run([*command, "stop"], check=False)
+        if stopped.returncode != 0:
+            raise RuntimeError(f"Postfix stop failed with exit code {stopped.returncode}")
+        status = _postfix_status(command)
+    except OSError as exc:
+        raise RuntimeError(f"Could not stop or verify Postfix: {exc}") from exc
+    if status.returncode != 3:
+        detail = (status.stderr or status.stdout).strip()
+        raise RuntimeError(
+            f"Could not confirm Postfix stopped (status {status.returncode})"
+            + (f": {detail}" if detail else "")
+        )
+    print("[+] Stopped the Postfix service started for this assessment.")
+
+
+def ensure_local_smtp(cleanup):
     """Offer to start Postfix when the local relay is unavailable."""
     if smtp_server_running():
         return None
@@ -51,7 +75,7 @@ def ensure_local_smtp():
     service = which("service") if sys.platform.startswith("linux") else None
     if not service:
         return f"{unavailable} Start a local SMTP relay manually and rerun the assessment."
-    command = [service, "postfix", "start"]
+    command = [service, "postfix"]
     if os.geteuid() != 0:
         sudo = which("sudo")
         if not sudo:
@@ -63,7 +87,22 @@ def ensure_local_smtp():
         return "Local SMTP relay was not started; the spoofing assessment was skipped."
 
     try:
-        completed = subprocess.run(command, check=False)
+        status = _postfix_status(command)
+    except OSError as exc:
+        return f"Could not check Postfix status: {exc}. The spoofing assessment was skipped."
+    if status.returncode == 0:
+        return "Postfix is already running but is not responding on localhost:25; the spoofing assessment was skipped."
+    if status.returncode != 3:
+        detail = (status.stderr or status.stdout).strip()
+        return (
+            f"Could not determine whether Postfix is running (status {status.returncode})"
+            + (f": {detail}" if detail else "")
+            + "; the spoofing assessment was skipped."
+        )
+
+    cleanup.callback(_stop_postfix, command)
+    try:
+        completed = subprocess.run([*command, "start"], check=False)
     except OSError as exc:
         return f"Could not start Postfix: {exc}. The spoofing assessment was skipped."
     if completed.returncode != 0:
@@ -76,7 +115,7 @@ def ensure_local_smtp():
 # ---------------------------------------------------------------------------
 # Spoofing Assessment
 # ---------------------------------------------------------------------------
-def perform_spoof_test(domain, recipient):
+def perform_spoof_test(domain, recipient, cleanup):
     """
     Perform a controlled email spoofing assessment.
 
@@ -115,7 +154,7 @@ def perform_spoof_test(domain, recipient):
         return result
 
     # Check SMTP relay
-    smtp_error = ensure_local_smtp()
+    smtp_error = ensure_local_smtp(cleanup)
     if smtp_error:
 
         result["assessment"] = "LOCAL SMTP RELAY NOT AVAILABLE"

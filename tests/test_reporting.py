@@ -94,12 +94,11 @@ class ReportingTests(unittest.TestCase):
             {"successful": True},
         )
         paragraphs = summary.split("\n\n")
-        self.assertIn("supplied email passed", paragraphs[1])
-        self.assertIn("receiving system verified that message", paragraphs[1])
+        self.assertIn("supplied email passed the checks recorded by the receiving system", paragraphs[1])
         self.assertIn("successfully delivered a message impersonating example.test", paragraphs[2])
         self.assertIn("interception or alteration", paragraphs[3])
-        self.assertIn("weak verification safeguard", paragraphs[3])
-        self.assertIn("reporting of delivery security issues", paragraphs[3])
+        self.assertIn("weak verification safeguard was identified", paragraphs[3])
+        self.assertIn("Reporting of email delivery security issues was not identified", paragraphs[3])
         self.assertIn("reduce exposure to impersonation", paragraphs[4])
         for technical_term in ("SPF", "DKIM", "DMARC", "MTA-STS", "TLS-RPT", "1024", "selector1"):
             self.assertNotIn(technical_term, summary)
@@ -128,14 +127,14 @@ class ReportingTests(unittest.TestCase):
         summary = build_executive_summary("example.test", self.results)
         self.assertIn("No email sample was supplied", summary)
         self.assertIn("not fully enforced", summary)
-        self.assertIn("reporting of delivery security issues", summary)
+        self.assertIn("Reporting of email delivery security issues was not configured correctly", summary)
 
     def test_summary_highlights_weak_sender_protections_without_spoof_test(self):
         self.results[2] = assess_dmarc("v=DMARC1; p=none")
         summary = build_executive_summary(
             "example.test", self.results, {"spf": "pass", "dkim": "pass", "dmarc": "pass"}
         )
-        self.assertIn("policy does not request that messages failing verification be blocked", summary)
+        self.assertIn("policy did not request that recipients block messages that failed verification", summary)
         self.assertIn("areas requiring further review", summary)
 
     def test_weak_dkim_selector_is_formatted_and_its_risk_explained(self):

@@ -4,6 +4,7 @@ Command-line interface for Email-Audit.
 
 import argparse
 import os
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -166,6 +167,11 @@ def process_email_sample(domain, email_file, results, dkim_records):
 
 
 def main():
+    with ExitStack() as cleanup:
+        _run_assessment(cleanup)
+
+
+def _run_assessment(cleanup):
     """
     Execute an email security assessment.
 
@@ -246,6 +252,7 @@ def main():
         spoof_result = perform_spoof_test(
             args.domain,
             args.spoof,
+            cleanup,
         )
 
         report_spoof(spoof_result)
@@ -313,6 +320,7 @@ def main():
     # --------------------------------------------------------------------------
     # Completion Summary
     # --------------------------------------------------------------------------
+    cleanup.close()
     print_completion_summary(
         findings,
         findings_file,
