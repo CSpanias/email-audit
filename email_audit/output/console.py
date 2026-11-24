@@ -2,7 +2,6 @@
 
 import shlex
 
-from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
@@ -179,7 +178,7 @@ def print_assessment(result):
             fields.extend((f"policy: {name}={value}", meaning) for value in values)
 
     if fields:
-        table = Table(box=box.SIMPLE, show_edge=False, pad_edge=False)
+        table = Table()
         table.add_column("Field", style="cyan", max_width=44, overflow="fold")
         table.add_column("Meaning", overflow="fold")
         for field, meaning in fields:

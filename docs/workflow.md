@@ -5,7 +5,7 @@ Only assess domains and send test messages when authorised to do so.
 ## DNS review
 
 ```bash
-email-audit example.com
+email-audit -D example.com
 ```
 
 The tool queries SPF, common DKIM selectors, DMARC, MTA-STS and TLS-RPT, and
@@ -17,7 +17,7 @@ absent.
 ## Email sample
 
 ```bash
-email-audit example.com --email sample.eml
+email-audit -D example.com --email sample.eml
 ```
 
 An `.eml` or `.msg` sample adds authentication evidence. If a DKIM selector
@@ -28,7 +28,7 @@ independently verified.
 ## Controlled spoofing
 
 ```bash
-email-audit example.com --spoof recipient@example.com
+email-audit -D example.com --spoof recipient@example.com
 ```
 
 The message uses `ceo@<domain>` as its sender and is submitted through the

@@ -90,15 +90,18 @@ def parse_arguments():
         formatter_class=RawDescriptionRichHelpFormatter,
         epilog=dedent("""\
             Examples:
-              email-audit example.com
-              email-audit example.com --email sample.eml
-              email-audit example.com --spoof recipient@example.com
-              email-audit example.com --csacyber
+              email-audit -D example.com
+              email-audit --domain example.com --email sample.eml
+              email-audit -D example.com --spoof recipient@example.com
+              email-audit -D example.com --csacyber
         """),
     )
 
     parser.add_argument(
-        "domain",
+        "-D",
+        "--domain",
+        required=True,
+        metavar="DOMAIN",
         help="Target domain"
     )
 

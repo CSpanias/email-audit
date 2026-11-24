@@ -81,13 +81,13 @@ The tool follows the same assessment methodology typically used during an email 
 
 ```bash
 # DNS Review
-email-audit <domain>
+email-audit -D <domain>
 
 # Email Header Analysis
-email-audit <domain> --email <email_file>
+email-audit -D <domain> --email <email_file>
 
 # Spoofing Test
-email-audit <domain> --spoof <recipient>
+email-audit -D <domain> --spoof <recipient>
 
 ```
 

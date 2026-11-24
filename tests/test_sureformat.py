@@ -48,7 +48,7 @@ class SureFormatTests(unittest.TestCase):
         ]
         for flag in (False, True):
             with self.subTest(csacyber=flag), contextlib.ExitStack() as stack:
-                args = ["email-audit", "example.test"] + (["--csacyber"] if flag else [])
+                args = ["email-audit", "-D", "example.test"] + (["--csacyber"] if flag else [])
                 stack.enter_context(patch("sys.argv", args))
                 for name in (
                     "get_spf_record", "get_dmarc_record", "check_mta_sts",

@@ -37,8 +37,24 @@ class CliTests(unittest.TestCase):
         self.assertIn("--email", result.stdout)
         self.assertIn("--spoof", result.stdout)
         self.assertIn("--csacyber", result.stdout)
-        self.assertIn("email-audit example.com", result.stdout)
+        self.assertIn("-D", result.stdout)
+        self.assertIn("--domain", result.stdout)
+        self.assertIn("email-audit -D example.com", result.stdout)
         self.assertNotIn("\x1b[", result.stdout)
+
+    def test_domain_flag_is_required_and_both_forms_work(self):
+        for flag in ("-D", "--domain"):
+            with self.subTest(flag=flag), patch(
+                "sys.argv", ["email-audit", flag, "example.test"]
+            ):
+                self.assertEqual(cli.parse_arguments().domain, "example.test")
+        for arguments in ([], ["example.test"]):
+            with self.subTest(arguments=arguments), patch(
+                "sys.argv", ["email-audit", *arguments]
+            ), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as exc:
+                    cli.parse_arguments()
+                self.assertEqual(exc.exception.code, 2)
 
     def test_assessment_and_evidence_preserve_literal_dns_text(self):
         result = {
@@ -87,6 +103,8 @@ class CliTests(unittest.TestCase):
             print_assessment(assess_spf(record))
         lines = output.getvalue().splitlines()
         self.assertIn(record, output.getvalue())
+        self.assertTrue(any(border in output.getvalue() for border in ("┏", "┌", "+")))
+        self.assertTrue(any(border in output.getvalue() for border in ("┗", "└", "+")))
         self.assertTrue(any("v=spf1" in line and "SPF record version" in line for line in lines))
         self.assertTrue(any("include:mail.example.test" in line and "referenced" in line for line in lines))
         self.assertTrue(any("ip4:192.0.2.0/24" in line and "IPv4" in line for line in lines))
@@ -150,7 +168,7 @@ class CliTests(unittest.TestCase):
             output = io.StringIO()
             with contextlib.ExitStack() as stack:
                 stack.enter_context(patch("sys.argv", [
-                    "email-audit", "example.test", "--email", "sample.eml"
+                    "email-audit", "-D", "example.test", "--email", "sample.eml"
                 ]))
                 clock = stack.enter_context(patch.object(cli, "datetime"))
                 clock.now.side_effect = [
@@ -209,7 +227,7 @@ class CliTests(unittest.TestCase):
             old_cwd = os.getcwd()
             stack.callback(os.chdir, old_cwd)
             os.chdir(directory)
-            stack.enter_context(patch("sys.argv", ["email-audit", "example.test", "--csacyber"]))
+            stack.enter_context(patch("sys.argv", ["email-audit", "-D", "example.test", "--csacyber"]))
             stack.enter_context(patch.object(cli, "get_spf_record", return_value=""))
             stack.enter_context(patch.object(cli, "check_dkim_selectors", return_value=[]))
             stack.enter_context(patch.object(cli, "get_dmarc_record", return_value=""))
@@ -235,7 +253,7 @@ class CliTests(unittest.TestCase):
     def test_terminal_progress_shows_each_check(self):
         terminal = io.StringIO()
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("sys.argv", ["email-audit", "example.test"]))
+            stack.enter_context(patch("sys.argv", ["email-audit", "-D", "example.test"]))
             stack.enter_context(patch.object(cli.Path, "mkdir"))
             stack.enter_context(patch.object(cli, "console", Console(file=terminal, force_terminal=True)))
             for name in (
@@ -257,7 +275,7 @@ class CliTests(unittest.TestCase):
     def test_skipped_spoof_test_never_prompts_for_delivery_or_reports_a_result(self):
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch("sys.argv", [
-                "email-audit", "example.test", "--spoof", "recipient@example.test"
+                "email-audit", "-D", "example.test", "--spoof", "recipient@example.test"
             ]))
             stack.enter_context(patch.object(cli.Path, "mkdir"))
             for name in (
@@ -299,7 +317,7 @@ class CliTests(unittest.TestCase):
         for assessment in ("MESSAGE SUBMITTED", "REJECTED BY SMTP RELAY"):
             with self.subTest(assessment=assessment), contextlib.ExitStack() as stack:
                 stack.enter_context(patch("sys.argv", [
-                    "email-audit", "example.test", "--spoof", "recipient@example.test"
+                    "email-audit", "-D", "example.test", "--spoof", "recipient@example.test"
                 ]))
                 stack.enter_context(patch.object(cli.Path, "mkdir"))
                 for name in (
