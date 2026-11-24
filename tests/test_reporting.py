@@ -1,8 +1,11 @@
 import json
+import base64
 import re
 import unittest
 from unittest.mock import Mock, patch
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from email_audit.dns.dkim import assess_dkim
 from email_audit.dns.dmarc import assess_dmarc
 from email_audit.dns.mta_sts import assess_mta_sts, parse_mta_sts_policy
@@ -17,12 +20,19 @@ from email_audit.reporting.remediation import build_recommendations
 
 
 class ReportingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048).public_key()
+        der = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+        cls.dkim_record = "v=DKIM1; p=" + base64.b64encode(der).decode("ascii")
+
     def setUp(self):
         self.results = [
             assess_spf("v=spf1 -all"),
-            assess_dkim("selector1", "v=DKIM1; p=key", True),
+            assess_dkim("selector1", self.dkim_record, True),
             assess_dmarc("v=DMARC1; p=reject"),
-            assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy("mode: enforce")),
+            assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(
+                "version: STSv1\nmode: enforce\nmx: mail.example.test\nmax_age: 86400")),
         ]
 
     def test_findings_use_yaml_description(self):
@@ -122,12 +132,32 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn("functioning as intended", summary)
 
     def test_summary_handles_no_sample_and_non_enforcing_transport(self):
-        self.results[3] = assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy("mode: testing"))
+        self.results[3] = assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(
+            "version: STSv1\nmode: testing\nmx: mail.example.test\nmax_age: 86400"))
         self.results.append(assess_tls_rpt(["v=TLSRPTv1; rua=invalid"]))
         summary = build_executive_summary("example.test", self.results)
         self.assertIn("No email sample was supplied", summary)
         self.assertIn("not fully enforced", summary)
         self.assertIn("Reporting of email delivery security issues was not configured correctly", summary)
+
+    def test_tls_rpt_summary_uses_title_case_for_status(self):
+        for records, error, expected in (
+            ([], None, "Missing"),
+            (["v=TLSRPTv1; rua=mailto:a@example.test"], None, "Present"),
+            (["v=TLSRPTv1; rua=invalid"], None, "Invalid"),
+            ([], "timeout", "Unknown"),
+        ):
+            with self.subTest(expected=expected):
+                result = assess_tls_rpt(records, error)
+                commentary = build_commentary("example.test", self.results + [result])
+                self.assertIn(f"| TLS-RPT | {expected} |", commentary)
+                self.assertEqual(result["assessment"], expected.upper())
+
+    def test_mta_sts_commentary_expands_transport_abbreviations(self):
+        commentary = build_commentary("example.test", self.results)
+        section = commentary.split("### Mail Transfer Agent Strict Transport Security", 1)[1]
+        self.assertIn("Simple Mail Transfer Protocol (SMTP)", section)
+        self.assertIn("Transport Layer Security (TLS)", section)
 
     def test_summary_highlights_weak_sender_protections_without_spoof_test(self):
         self.results[2] = assess_dmarc("v=DMARC1; p=none")
@@ -136,6 +166,50 @@ class ReportingTests(unittest.TestCase):
         )
         self.assertIn("policy did not request that recipients block messages that failed verification", summary)
         self.assertIn("areas requiring further review", summary)
+
+    def test_non_enforcing_policies_are_findings_and_have_actionable_guidance(self):
+        self.results[2] = assess_dmarc("v=DMARC1; p=none")
+        for mode in ("none", "testing"):
+            with self.subTest(mode=mode):
+                self.results[3] = assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(
+                    f"version: STSv1\nmode: {mode}\nmx: mail.example.test\nmax_age: 86400"))
+                ids = [item["id"] for item in build_findings("example.test", self.results)]
+                self.assertIn("monitoring-dmarc", ids)
+                self.assertIn("non-enforcing-mta-sts", ids)
+                recommendations = build_recommendations(self.results)
+                self.assertIn("move towards quarantine or rejection", recommendations)
+                self.assertIn("move to enforce mode", recommendations)
+                self.assertNotIn("Maintain the current", recommendations)
+
+    def test_invalid_and_broad_evidence_does_not_produce_secure_narratives(self):
+        self.results[0] = assess_spf("v=spf1 ip4:0.0.0.0/0 -all")
+        self.results[1] = assess_dkim("selector1", "v=DKIM1; p=", True)
+        self.results[2] = assess_dmarc("v=DMARC1; p=none; p=reject")
+        self.results[3] = assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy("mode: enforce"))
+        ids = [item["id"] for item in build_findings("example.test", self.results)]
+        for finding in ("broad-spf", "unconfirmed-dkim-key", "invalid-dmarc", "invalid-mta-sts"):
+            self.assertIn(finding, ids)
+        commentary = build_commentary("example.test", self.results)
+        self.assertIn("broad allowance", commentary)
+        self.assertIn("Unknown (invalid record)", commentary)
+        self.assertIn("| MTA-STS | Unknown", commentary)
+        self.assertNotIn("public key was successfully retrieved", commentary)
+        self.assertNotIn("operate in enforcement mode", commentary)
+        recommendations = build_recommendations(self.results)
+        self.assertIn("specific authorised sending addresses", recommendations)
+        self.assertIn("verify that their DKIM public keys are valid", recommendations)
+        self.assertIn("invalid or duplicate DMARC", recommendations)
+
+    def test_reduced_dmarc_policy_is_included_in_findings(self):
+        self.results[2] = assess_dmarc("v=DMARC1; p=reject; t=y")
+        ids = [item["id"] for item in build_findings("example.test", self.results)]
+        self.assertIn("limited-dmarc", ids)
+        self.assertNotIn("monitoring-dmarc", ids)
+        self.results[2] = assess_dmarc("v=DMARC1; p=none; pct=101")
+        ids = [item["id"] for item in build_findings("example.test", self.results)]
+        self.assertIn("invalid-dmarc", ids)
+        self.assertIn("monitoring-dmarc", ids)
+        self.assertIn("move towards quarantine or rejection", build_recommendations(self.results))
 
     def test_weak_dkim_selector_is_formatted_and_its_risk_explained(self):
         self.results[1].update(key_assessment="WEAK", key_bits=1024, selector="selector1")
@@ -163,7 +237,7 @@ class ReportingTests(unittest.TestCase):
             with self.subTest(record=record):
                 self.results[2] = assess_dmarc(record)
                 commentary = build_commentary("example.test", self.results)
-                self.assertIn("\n\nAlthough this configuration provides visibility", commentary)
+                self.assertIn("\n\nAlthough this configuration can provide visibility", commentary)
                 report = render_html("example.test", commentary, "", self.results, [])
                 self.assertIn("</ul>\n<p>Although this configuration", report)
 

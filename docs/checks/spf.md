@@ -5,38 +5,50 @@ may use an SMTP identity. A receiver evaluates the record against the
 connecting IP; SPF does not sign a message or verify its visible `From:`
 header by itself.
 
+![SPF evaluation for authorised and unauthorised sending servers](../images/spf-flow.png)
+
+This illustration is from [Email Security Explained](https://mollysec.com/posts/email-security-explained/);
+the addresses are placeholders. SPF checks the SMTP envelope sender or HELO
+identity, not the visible `From:` header.
+
 ## What Email Audit checks
 
-The tool queries the target domain's TXT records and selects
-an SPF record containing `v=spf1`. It displays recognised `include`, `ip4`,
-`ip6` and `all` mechanisms and classifies the first `all` mechanism: `-all`
-as secure, `~all` as acceptable and `+all` or `all` as insecure. A failed
-lookup is inconclusive; a genuinely absent record is marked missing.
+The tool queries the target domain's TXT records for SPF records beginning
+with `v=spf1`. It displays recognised mechanisms and classifies the first
+`all` mechanism. Multiple SPF records and invalid IP mechanisms are
+inconclusive. An earlier `ip4:` or `ip6:` mechanism that permits an entire
+address family is flagged as insecure, even if followed by `-all`.
+
+A failed lookup is inconclusive; a genuinely absent record is marked missing.
 
 ```text
 v=spf1 ip4:192.0.2.10 include:mail.example.net -all
 ```
 
-The `ip4` term identifies an address, while `include` delegates a matching
-decision to another domain's SPF policy. `-all` yields SPF fail when earlier
-mechanisms do not match; the recipient decides how to handle the result.
-`~all` yields softfail; `+all` matches every sender. An unqualified `all`
-has the same effect as `+all`. Mechanisms after the first `all` are ignored.
+| Component | Meaning |
+|---|---|
+| `v=spf1` | Identifies the SPF version. |
+| `ip4:` / `ip6:` | Matches a sending IPv4 / IPv6 address or range. |
+| `include:` | Matches senders permitted by another domain's SPF policy. |
+| `all` | Matches any sender reaching this mechanism. |
 
-| Value | Behaviour | Use case |
-|---|---|---|
-| `-all` | SPF fail for unauthorised senders | Domains with a fully identified sending infrastructure |
-| `~all` | SPF softfail for unauthorised senders | Common when sending sources are not yet fully known |
-| `+all` | SPF pass for all senders | Testing, backwards compatibility, or (more commonly) misconfiguration |
+| Value | Behaviour | Use case | Assessment |
+|---|---|---|---|
+| `-all` | SPF fail for senders not matched earlier | Domains with a fully identified sending infrastructure | Secure |
+| `~all` | SPF softfail for senders not matched earlier | Sending sources are not yet fully known | Acceptable |
+| `+all` or `all` | SPF pass for all remaining senders | Testing, backwards compatibility, or misconfiguration | Insecure |
+| `?all` | SPF neutral for senders not matched earlier | No definitive policy for remaining senders | Unknown |
 
-SPF returns an authentication result; recipients decide whether to reject or
-otherwise handle a message.
+An unqualified `all` is equivalent to `+all`; mechanisms after the first
+`all` are ignored. SPF returns an authentication result; recipients decide
+whether to reject or otherwise handle a message.
 
 ## Limitations
 
 This is a simple record review, not a complete SPF evaluator. It does not
-resolve all mechanisms, calculate the DNS lookup limit, detect multiple SPF
-records, or establish that a specific sender will pass. Check the full policy
+resolve all mechanisms, calculate the DNS lookup limit, or establish that a
+specific sender will pass. A secure classification of `-all` does not validate
+the whole policy. Check the full policy
 independently and retry inconclusive DNS lookups. A sample's reported SPF result
 reflects that message's receiving system, not a new verification.
 

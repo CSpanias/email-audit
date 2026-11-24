@@ -75,7 +75,9 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
     text.append("")
 
     # SPF value
-    if spf.get("all_policy") == "-all":
+    if spf.get("record_error"):
+        spf_config = "Unknown (invalid record)"
+    elif spf.get("all_policy") == "-all":
         spf_config = "Hard Fail (`-all`)"
 
     elif spf.get("all_policy") == "~all":
@@ -86,6 +88,8 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
 
     else:
         spf_config = "Not Present" if spf["assessment"] == "MISSING" else "Unknown"
+    if spf.get("broad_mechanism"):
+        spf_config += " (broad allowance)"
 
     # DKIM value
     if dkim["assessment"] == "PRESENT":
@@ -96,14 +100,17 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
     # DMARC value
     policy = dmarc.get("tags", {}).get("p", "").lower()
     dmarc_config = DMARC_MAP.get(policy, "Not Present" if dmarc["assessment"] == "MISSING" else "Unknown")
-    if dmarc.get("coverage_limited"):
+    if dmarc.get("record_errors"):
+        dmarc_config = "Unknown (invalid record)"
+    elif dmarc.get("coverage_limited"):
         dmarc_config += " (limited)"
     elif dmarc.get("coverage_errors") and policy in {"reject", "quarantine"}:
         dmarc_config += " (coverage unknown)"
 
     # MTA-STS value
     mode = mta.get("policy", {}).get("mode", "")
-    mta_config = MTA_MAP.get(mode, "Not Present" if mta["assessment"] == "MISSING" else "Unknown")
+    mta_config = ("Unknown" if mta["assessment"] == "UNKNOWN" else
+                  MTA_MAP.get(mode, "Not Present" if mta["assessment"] == "MISSING" else "Unknown"))
 
     text.append("| Control  | Configuration  |")
     text.append("|----------|----------------|")
@@ -112,7 +119,7 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
     text.append(f"| DMARC   | {dmarc_config} |")
     text.append(f"| MTA-STS | {mta_config}   |")
     if tls_rpt is not None:
-        text.append(f"| TLS-RPT | {tls_rpt['assessment']} |")
+        text.append(f"| TLS-RPT | {tls_rpt['assessment'].capitalize()} |")
 
     text.append("")
 
@@ -142,6 +149,9 @@ def _build_spf_commentary(text, spf, auth_results):
         text.append(
             TEXT['_build_spf_commentary']['the_domain_implemented_spf_and_identified_authorised']
         )
+
+    elif spf.get("broad_mechanism"):
+        text.append(ADDITIONAL["spf_broad"].format(mechanism=spf["broad_mechanism"]))
 
     elif spf["assessment"] == "INSECURE":
 
@@ -253,27 +263,12 @@ def _build_dkim_commentary(text, dkim, auth_results):
     text.append("")
 
     if dkim["assessment"] == "PRESENT":
-
-        if auth_results and auth_results.get("dkim") == "pass":
-
-            text.append(
-                TEXT['_build_dkim_commentary']['dkim_pass_observed']
-            )
-            text.append("")
-
-            text.append(
-                TEXT['_build_dkim_commentary']['this_demonstrates_that_outbound_email_messages_were']
-            )
-
-        else:
-
-            text.append(
-                TEXT['_build_dkim_commentary']['dkim_key_discovered']
-            )
+        text.append(TEXT['_build_dkim_commentary']['dkim_key_discovered'])
 
     elif dkim["assessment"] == "UNKNOWN":
 
         text.append(ADDITIONAL["dkim_dns_unknown"] if dkim.get("dns_errors") else
+                    ADDITIONAL["dkim_key_unknown"] if dkim.get("key_error") else
                     TEXT['_build_dkim_commentary']['dkim_support_could_not_be_confirmed_through'])
         text.append("")
 
@@ -286,8 +281,20 @@ def _build_dkim_commentary(text, dkim, auth_results):
             "",
             ADDITIONAL["weak_dkim"].format(selector=key["selector"], bits=key["key_bits"]),
         ])
+    for key in dkim.get("key_observations", []):
+        if key.get("key_assessment") == "UNKNOWN" and key.get("selector") != dkim.get("selector"):
+            text.extend(["", ADDITIONAL["dkim_other_key_unknown"].format(selector=key["selector"])])
     if dkim.get("dns_errors") and dkim["assessment"] == "PRESENT":
         text.extend(["", ADDITIONAL["dkim_dns_partial"]])
+    if auth_results and auth_results.get("dkim_sample_key"):
+        sample = auth_results["dkim_sample_key"]
+        text.extend(["", ADDITIONAL["dkim_sample_key"].format(
+            selector=auth_results["dkim_selector"], domain=auth_results["dkim_domain"],
+            assessment=sample["assessment"].lower(),
+        )])
+    if auth_results and auth_results.get("dkim_lookup_error"):
+        text.extend(["", ADDITIONAL["dkim_sample_error"].format(
+            error=auth_results["dkim_lookup_error"])])
     text.append("")
 
 
@@ -309,7 +316,9 @@ def _build_dmarc_commentary(text, dmarc):
 
     tags = dmarc.get("tags", {})
 
-    if dmarc.get("coverage_limited"):
+    if dmarc.get("record_errors"):
+        text.append(ADDITIONAL["dmarc_invalid_record"])
+    elif dmarc.get("coverage_limited"):
         text.append(ADDITIONAL["dmarc_limited"].format(policy=tags["p"]))
 
     elif dmarc["assessment"] == "SECURE":
@@ -351,7 +360,7 @@ def _build_dmarc_commentary(text, dmarc):
     if dmarc.get("coverage_errors") and dmarc["assessment"] != "UNKNOWN":
         text.extend(["", ADDITIONAL["dmarc_invalid_tag"]])
 
-    if dmarc["assessment"] != "MISSING":
+    if dmarc["assessment"] != "MISSING" and not dmarc.get("record_errors"):
 
         if "pct" in tags and not dmarc.get("coverage_errors"):
             text.append(

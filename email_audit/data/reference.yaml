@@ -2,7 +2,7 @@ controls:
   SPF: "Sender Policy Framework (SPF) is an email authentication mechanism that enables domain owners to explicitly identify the systems authorised to send email on behalf of the domain."
   DKIM: "DomainKeys Identified Mail (DKIM) is an email authentication mechanism that uses cryptographic signatures to allow receiving mail systems to verify that messages were authorised by the sending domain and were not modified in transit."
   DMARC: "Domain-based Message Authentication, Reporting and Conformance (DMARC) is an email authentication and policy framework that builds upon SPF and DKIM by instructing receiving organisations how to handle messages that fail authentication checks."
-  MTA-STS: "Mail Transfer Agent Strict Transport Security (MTA-STS) is an email transport security mechanism that helps ensure SMTP communications are delivered over trusted TLS-encrypted channels and reduces the risk of downgrade attacks."
+  MTA-STS: "Mail Transfer Agent Strict Transport Security (MTA-STS) is an email transport security mechanism that helps protect Simple Mail Transfer Protocol (SMTP) communications using trusted connections encrypted with Transport Layer Security (TLS), reducing the risk of downgrade attacks."
   TLS-RPT: "SMTP TLS Reporting (TLS-RPT) allows compatible sending mail servers to report statistics and failures affecting email transport security to a domain owner."
 references:
   cccs: https://www.cyber.gc.ca/en/guidance/implementation-guidance-email-domain-protection

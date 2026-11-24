@@ -1,5 +1,6 @@
 import base64
 import contextlib
+import io
 import os
 import tempfile
 import unittest
@@ -15,9 +16,13 @@ from email_audit.cli import _lookup_record, process_email_sample
 from email_audit.dns.dkim import assess_dkim, assess_dkim_key, assess_dkim_records, check_dkim_selectors
 from email_audit.dns.dmarc import assess_dmarc, get_dmarc_record
 from email_audit.dns.lookup import DNSLookupError
-from email_audit.dns.mta_sts import assess_mta_sts, check_mta_sts, parse_mta_sts_policy
+from email_audit.dns.mta_sts import (
+    MtaStsPolicyError, assess_mta_sts, check_mta_sts, get_mta_sts_policy,
+    parse_mta_sts_policy,
+)
 from email_audit.dns.spf import assess_spf, get_spf_record
 from email_audit.dns.tls_rpt import assess_tls_rpt, get_tls_rpt_records
+from email_audit.email.eml import parse_eml_file
 from email_audit.reporting.commentary import build_commentary
 from email_audit.reporting.findings import build_findings
 from email_audit.reporting.executive_summary import build_executive_summary
@@ -44,6 +49,24 @@ def dkim_record(bits):
 
 
 class DnsAndSpfTests(unittest.TestCase):
+    def test_multiple_records_and_broad_or_invalid_address_mechanisms(self):
+        with patch("email_audit.dns.spf.get_txt_records", return_value=[
+            "v=spf1 -all", "v=spf1 +all",
+        ]):
+            multiple = assess_spf(get_spf_record("example.test"))
+        self.assertEqual(multiple["assessment"], "UNKNOWN")
+        self.assertIn("multiple SPF records", multiple["record_error"])
+        for mechanism in ("ip4:0.0.0.0/0", "+ip6:::/0"):
+            with self.subTest(mechanism=mechanism):
+                result = assess_spf(f"v=spf1 {mechanism} -all")
+                self.assertEqual(result["assessment"], "INSECURE")
+                self.assertEqual(result["broad_mechanism"], mechanism)
+        self.assertEqual(assess_spf("v=spf1 -ip4:0.0.0.0/0 -all")["assessment"], "SECURE")
+        self.assertEqual(assess_spf("v=spf1 -ip4:0.0.0.0/0 ip4:0.0.0.0/0 -all")["assessment"], "SECURE")
+        self.assertEqual(assess_spf("v=spf1 -all ip4:0.0.0.0/0")["assessment"], "SECURE")
+        self.assertEqual(assess_spf("v=spf1 ip4:bad -all")["assessment"], "UNKNOWN")
+        self.assertEqual(assess_spf("v=spf1 ip4:192.0.2.0/255.255.255.0 -all")["assessment"], "UNKNOWN")
+
     def test_first_all_mechanism_controls_assessment_and_reporting(self):
         cases = (
             ("+all -all", "INSECURE", "+all", "Permissive (`+all`)"),
@@ -112,7 +135,7 @@ class DnsAndSpfTests(unittest.TestCase):
         self.assertNotIn("controls were identified", build_executive_summary("example.test", results))
 
     def test_discovered_dkim_key_is_retained_when_another_selector_lookup_fails(self):
-        answer = Mock(strings=(b"v=DKIM1; p=key",))
+        answer = Mock(strings=(dkim_record(2048).replace('" "', '').strip('"').encode(),))
         with patch("email_audit.dns.lookup.dns.resolver.resolve") as resolve:
             resolve.side_effect = [[answer], dns.exception.Timeout(),
                                    dns.resolver.NoAnswer(), dns.resolver.NoAnswer()]
@@ -127,10 +150,10 @@ class DnsAndSpfTests(unittest.TestCase):
         self.assertIn("DNS lookup failures", build_recommendations(results))
 
     def test_sample_selector_lookup_failure_preserves_discovered_key(self):
-        records = [("default", "v=DKIM1; p=key", True)]
+        records = [("default", dkim_record(2048), True)]
         results = [assess_spf("v=spf1 -all"), assess_dkim_records(records)]
         errors = []
-        auth = {"dkim_selector": "sample", "dkim": "pass"}
+        auth = {"dkim_selector": "sample", "dkim_domain": "example.test", "dkim": "pass"}
         with patch("email_audit.cli.parse_eml_file", return_value=auth), \
              patch("email_audit.cli.check_dkim_dns", side_effect=DNSLookupError("timeout")):
             self.assertEqual(process_email_sample("example.test", "sample.eml",
@@ -142,6 +165,19 @@ class DnsAndSpfTests(unittest.TestCase):
 
 
 class DmarcCoverageTests(unittest.TestCase):
+    def test_duplicate_records_and_invalid_policy_tags_are_inconclusive(self):
+        with patch("email_audit.dns.dmarc.get_txt_records", return_value=[
+            "v=DMARC1; p=reject", "v=DMARC1; p=none",
+        ]):
+            result = assess_dmarc(get_dmarc_record("example.test"))
+        self.assertEqual(result["assessment"], "UNKNOWN")
+        for tags in ("p=none; p=reject", "p=reject; adkim=invalid",
+                     "p=reject; sp=invalid"):
+            with self.subTest(tags=tags):
+                result = assess_dmarc(f"v=DMARC1; {tags}")
+                self.assertEqual(result["assessment"], "UNKNOWN")
+                self.assertTrue(result["record_errors"])
+
     def test_policy_coverage_changes_assessment(self):
         cases = (
             ("p=reject", "SECURE", False),
@@ -190,7 +226,41 @@ class DkimKeyTests(unittest.TestCase):
                        '"v=DKIM1; p=abc; p=abc"'):
             with self.subTest(record=record):
                 self.assertEqual(assess_dkim_key(record)[0], "UNKNOWN")
-        self.assertEqual(assess_dkim_key('"v=DKIM1; k=ed25519; p=abc"')[0], "NOT APPLICABLE")
+        self.assertEqual(assess_dkim_key('"v=DKIM1; k=ed25519; p=abc"')[0], "UNKNOWN")
+        encoded = base64.b64encode(b"a" * 32).decode()
+        self.assertEqual(assess_dkim_key(f"v=DKIM1; k=ed25519; p={encoded}")[0], "NOT APPLICABLE")
+        for record in ("v=DKIM1; p=", "v=DKIM1; p=not-base64"):
+            result = assess_dkim("sample", record, True)
+            self.assertEqual(result["assessment"], "UNKNOWN")
+            self.assertTrue(result["key_error"])
+
+    def test_valid_key_is_not_hidden_by_unusable_first_selector(self):
+        result = assess_dkim_records([
+            ("default", "v=DKIM1; p=", True), ("selector1", self.strong, True),
+        ])
+        self.assertEqual(result["assessment"], "PRESENT")
+        self.assertEqual(result["selector"], "selector1")
+        self.assertEqual(result["key_observations"][0]["key_assessment"], "UNKNOWN")
+
+    def test_sample_signing_domain_is_queried_without_replacing_target_assessment(self):
+        records = [("default", self.strong, True)]
+        results = [assess_spf("v=spf1 -all"), assess_dkim_records(records)]
+        auth = {"dkim_selector": "external", "dkim_domain": "signer.example.test", "dkim": "pass"}
+        with patch("email_audit.cli.parse_eml_file", return_value=auth), \
+             patch("email_audit.cli.check_dkim_dns", return_value=("external", self.strong, True)) as query:
+            result = process_email_sample("example.test", "sample.eml", results, records, [])
+        query.assert_called_once_with("signer.example.test", "external")
+        self.assertEqual(results[1]["selector"], "default")
+        self.assertEqual(result["dkim_sample_key"]["assessment"], "PRESENT")
+
+    def test_sample_without_signing_domain_is_not_looked_up_against_target(self):
+        results = [assess_spf("v=spf1 -all"), assess_dkim_records([])]
+        auth = {"dkim_selector": "external", "dkim_domain": "", "dkim": "pass"}
+        with patch("email_audit.cli.parse_eml_file", return_value=auth), \
+             patch("email_audit.cli.check_dkim_dns") as query:
+            process_email_sample("example.test", "sample.eml", results, [], [])
+        query.assert_not_called()
+
 
     def test_all_common_selectors_and_sample_key_remain_in_findings(self):
         records = [("default", self.weak, True), ("selector1", self.strong, True)]
@@ -231,6 +301,56 @@ class DkimKeyTests(unittest.TestCase):
             filename, _ = export_sureformat("example.test", findings)
             root = ET.parse(filename).getroot()
             self.assertIn("SC-2187", [node.get("id") for node in root.findall(".//vulnerability")])
+
+
+class MtaStsValidationTests(unittest.TestCase):
+    def test_https_failures_remain_inconclusive_with_their_reason(self):
+        with patch("email_audit.dns.mta_sts.urllib.request.urlopen", side_effect=OSError("network unavailable")):
+            with self.assertRaisesRegex(MtaStsPolicyError, "network unavailable") as error:
+                get_mta_sts_policy("example.test")
+        result = assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(""), policy_error=str(error.exception))
+        self.assertEqual(result["assessment"], "UNKNOWN")
+        self.assertIn("network unavailable", result["breakdown"][0])
+
+    def test_dns_and_policy_require_valid_fields(self):
+        valid = "version: STSv1\nmode: enforce\nmx: *.example.test\nmax_age: 86400"
+        with patch("email_audit.dns.mta_sts.get_txt_records", return_value=["unrelated"]):
+            self.assertEqual(check_mta_sts("example.test"), "")
+        for record, policy in (
+            ("unrelated", valid), ("v=STSv1", valid),
+            ("v=STSv1; id=1\nv=STSv1; id=2", valid),
+            ("v=STSv1; id=1", "mode: enforce"),
+            ("v=STSv1; id=1", valid + "\nmode: none"),
+            ("v=stsv1; id=1", valid),
+            ("v=STSv1; ID=1", valid),
+            ("v=STSv1; id=1", valid.replace("version:", "VERSION:")),
+            ("v=STSv1; id=1", valid.replace("*.example.test", "*bad.example.test")),
+            ("v=STSv1; id=1", valid.replace("86400", "31557601")),
+        ):
+            with self.subTest(record=record, policy=policy):
+                self.assertEqual(assess_mta_sts(record, parse_mta_sts_policy(policy))["assessment"], "UNKNOWN")
+        self.assertEqual(assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(valid))["assessment"], "SECURE")
+        self.assertEqual(assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(
+            "version: STSv1\nmode: none\nmax_age: 0"))["assessment"], "INSECURE")
+        self.assertEqual(assess_mta_sts("v=STSv1; id=1", parse_mta_sts_policy(
+            valid.replace("86400", "0000086400")))["assessment"], "SECURE")
+
+
+class EmailSampleTests(unittest.TestCase):
+    def test_authentication_results_are_exact_and_ignore_comments(self):
+        cases = (
+            ("spf=passbad; dkim=passbad; dmarc=passbad", ("unknown", "unknown", "unknown")),
+            ('spf=pass"invalid"; dkim=pass; dmarc=pass', ("unknown", "pass", "pass")),
+            ("spf=fail (spf=pass); dkim=pass; dmarc=fail", ("fail", "pass", "fail")),
+            ("spf=pass; spf=fail; dkim=pass", ("unknown", "pass", "unknown")),
+            ("spf=temperror; dkim=pass header.d=example.test; dmarc=pass", ("temperror", "pass", "pass")),
+        )
+        for header, expected in cases:
+            with self.subTest(header=header):
+                data = f"Authentication-Results: mx.example.test; {header}\n\n".encode()
+                with patch("builtins.open", side_effect=lambda *args, **kwargs: io.BytesIO(data)):
+                    result = parse_eml_file("sample.eml")
+                self.assertEqual(tuple(result[name] for name in ("spf", "dkim", "dmarc")), expected)
 
 
 class TlsRptTests(unittest.TestCase):

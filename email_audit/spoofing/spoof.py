@@ -6,6 +6,7 @@ and validating how email security controls respond to spoofed messages.
 """
 
 import os
+import re
 import smtplib
 import subprocess
 import sys
@@ -203,18 +204,23 @@ def perform_spoof_test(domain, recipient, cleanup):
 
         return result
 
-    output = run_command([
-        "swaks",
-        "--to", recipient,
-        "--from", sender,
-        "--header", f"Subject: {subject}",
-        "--body", body,
-        "--server", "localhost"
-    ])
+    try:
+        returncode, output = run_command([
+            "swaks",
+            "--to", recipient,
+            "--from", sender,
+            "--header", f"Subject: {subject}",
+            "--body", body,
+            "--server", "localhost"
+        ])
+    except OSError as exc:
+        result["assessment"] = "UNKNOWN"
+        result["impact"] = f"Could not run swaks: {exc}"
+        return result
     
     output = output.lower()
 
-    if "queued as" in output:
+    if returncode == 0 and "queued as" in output:
 
         result["assessment"] = ("MESSAGE SUBMITTED")
         result["impact"] = (
@@ -224,16 +230,18 @@ def perform_spoof_test(domain, recipient, cleanup):
             "successfully enforced."
         )
 
-    elif "reject" in output:
+    elif re.search(r"(?m)^\s*<\*\*\s+5\d\d\b", output):
 
         result["assessment"] = ("REJECTED BY SMTP RELAY")
-        result["impact"] = ("The spoofed message was rejected before delivery.")
+        result["impact"] = ("The local SMTP relay rejected the message before delivery; "
+                            "recipient-side enforcement was not tested.")
 
     else:
 
         result["assessment"] = ("UNKNOWN")
         result["impact"] = (
-            "Unable to determine the result of the spoofing attempt."
+            f"Unable to determine the result of the spoofing attempt (swaks exit code {returncode})."
+            + (f"\nSwaks output: {output}" if output else "")
         )
 
     return result

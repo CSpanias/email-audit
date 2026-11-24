@@ -17,7 +17,7 @@ def export_sureformat(domain, findings, filename=None):
     definitions = load_definitions("findings")
     for finding in findings:
         definition = definitions.get(finding["id"])
-        if definition is None:
+        if definition is None or not definition.get("sureformat_id"):
             print(f"[!] No SureFormat mapping found for finding: {finding['id']}")
             continue
         vulnerability_id = definition["sureformat_id"]

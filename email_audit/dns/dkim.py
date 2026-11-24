@@ -36,13 +36,22 @@ def assess_dkim_key(record):
         if key in tags:
             return "UNKNOWN", None, "DKIM key record has duplicate tags"
         tags[key] = value.strip()
-    if tags.get("k", "rsa").lower() != "rsa":
-        return "NOT APPLICABLE", None, "DKIM key is not RSA"
     encoded = re.sub(r"\s+", "", tags.get("p", ""))
     if not encoded:
         return "UNKNOWN", None, "DKIM public key is empty or missing"
     try:
-        key = load_der_public_key(base64.b64decode(encoded, validate=True))
+        decoded = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        return "UNKNOWN", None, "DKIM public key could not be decoded"
+    algorithm = tags.get("k", "rsa").lower()
+    if algorithm == "ed25519":
+        if len(decoded) != 32:
+            return "UNKNOWN", None, "DKIM Ed25519 public key must be 32 bytes"
+        return "NOT APPLICABLE", None, "DKIM Ed25519 public key is present"
+    if algorithm != "rsa":
+        return "UNKNOWN", None, f"Unsupported DKIM public key algorithm: {algorithm}"
+    try:
+        key = load_der_public_key(decoded)
     except (ValueError, binascii.Error, UnsupportedAlgorithm):
         return "UNKNOWN", None, "DKIM RSA public key could not be decoded"
     if not isinstance(key, RSAPublicKey):
@@ -102,7 +111,11 @@ def check_dkim_selectors(domain, errors=None):
 
 def assess_dkim_records(records, auth_results=None, selected=None, dns_errors=None):
     """Assess the primary selector while retaining evidence from all discovered keys."""
-    primary = selected if selected is not None else (records[0] if records else ("", "", False))
+    candidates = ([selected] if selected and selected[1] else []) + list(records)
+    primary = next(
+        (item for item in candidates if item[2] and assess_dkim_key(item[1])[0] != "UNKNOWN"),
+        candidates[0] if candidates else ("", "", False),
+    )
     result = assess_dkim(*primary, auth_results)
     if dns_errors:
         result["dns_errors"] = list(dns_errors)
@@ -170,12 +183,18 @@ def assess_dkim(selector, record, dkim_found, auth_results=None):
         
     if dkim_found:
 
-        result["breakdown"].append("Public key present in DNS")
         key_assessment, key_bits, key_message = assess_dkim_key(record)
         result["key_assessment"] = key_assessment
         result["key_bits"] = key_bits
         result["breakdown"].append(key_message)
 
+        if key_assessment == "UNKNOWN":
+            result["key_error"] = key_message
+            result["impact"] = "The discovered DKIM public key could not be validated."
+            result["assessment"] = "UNKNOWN"
+            return result
+
+        result["breakdown"].append("Public key present in DNS")
         if auth_results and auth_results.get("dkim", "").lower() == "pass":
 
             result["impact"] = ("The domain supports DKIM signature validation and "

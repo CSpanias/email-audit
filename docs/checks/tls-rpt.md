@@ -16,6 +16,11 @@ destinations. It accepts `mailto` and `https` destinations.
 v=TLSRPTv1; rua=mailto:tls-reports@example.com
 ```
 
+| Field | Meaning |
+|---|---|
+| `v=` | TLS-RPT version. |
+| `rua=` | Destination or destinations for aggregate reports. |
+
 | Result | Finding |
 |---|---|
 | No version-one policy | `missing-tls-rpt` |

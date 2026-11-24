@@ -13,11 +13,10 @@ def get_dmarc_record(domain):
     Retrieve the DMARC record for a target domain.
     """
 
-    for record in get_txt_records(f"_dmarc.{domain}"):
-        if record.lower().split(";", 1)[0].strip() == "v=dmarc1":
-            return record
-
-    return ""
+    return "\n".join(
+        record for record in get_txt_records(f"_dmarc.{domain}")
+        if record.lower().split(";", 1)[0].strip() == "v=dmarc1"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +55,16 @@ def assess_dmarc(record, dns_error=None):
 
         return result
 
+    if len(record.splitlines()) != 1:
+        result["record_errors"] = ["Multiple DMARC records were identified"]
+        result["breakdown"].extend(result["record_errors"])
+        result["impact"] = "The effective DMARC policy could not be determined."
+        result["assessment"] = "UNKNOWN"
+        return result
+
     tags = {}
     duplicate_coverage_tags = set()
+    record_errors = []
 
     for part in record.split(";"):
 
@@ -68,11 +75,19 @@ def assess_dmarc(record, dns_error=None):
             k, v = k.strip().lower(), v.strip()
             if k in tags and k in {"pct", "t"}:
                 duplicate_coverage_tags.add(k)
+            elif k in tags:
+                record_errors.append(f"Duplicate DMARC tag: {k}")
             tags[k] = v
 
     policy = tags.get("p", "").lower()
     pct = tags.get("pct")
     testing = tags.get("t", "n").lower()
+    for tag in ("p", "sp", "np"):
+        if tag in tags and tags[tag].lower() not in {"none", "quarantine", "reject"}:
+            record_errors.append(f"Invalid DMARC {tag} value")
+    for tag in ("adkim", "aspf"):
+        if tag in tags and tags[tag].lower() not in {"r", "s"}:
+            record_errors.append(f"Invalid DMARC {tag} value")
     coverage_errors = []
     if duplicate_coverage_tags:
         coverage_errors.append("Duplicate DMARC coverage tags: " + ", ".join(sorted(duplicate_coverage_tags)))
@@ -88,6 +103,7 @@ def assess_dmarc(record, dns_error=None):
     result["tags"] = tags
     result["coverage_limited"] = limited
     result["coverage_errors"] = coverage_errors
+    result["record_errors"] = record_errors
 
     if "p" in tags:
         policy_text = {
@@ -124,8 +140,14 @@ def assess_dmarc(record, dns_error=None):
     if limited:
         result["breakdown"].append("The published policy may be applied less restrictively by some recipients")
     result["breakdown"].extend(coverage_errors)
+    result["breakdown"].extend(record_errors)
 
-    if coverage_errors and policy in {"reject", "quarantine"}:
+    if record_errors:
+        result["coverage_limited"] = False
+        result["impact"] = "The effective DMARC policy could not be determined because the record is invalid."
+        result["assessment"] = "UNKNOWN"
+
+    elif coverage_errors and policy in {"reject", "quarantine"}:
         result["impact"] = "The effective DMARC policy coverage could not be determined."
         result["assessment"] = "UNKNOWN"
 

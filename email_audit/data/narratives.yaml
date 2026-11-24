@@ -1,5 +1,17 @@
 additional_checks:
   spf_unknown: "The SPF configuration could not be determined from the available DNS evidence."
+  spf_broad: "The SPF mechanism `{mechanism}` could permit a broad range of senders in an IP address family, despite any later `all` mechanism."
+  broad_spf_recommendation: "Replace `{mechanism}` with the specific authorised sending addresses and review the complete SPF policy."
+  spf_review_recommendation: "Review the SPF record for validity and assess the complete policy, including DNS-dependent mechanisms."
+  dkim_review_recommendation: "Identify the selectors used for legitimate email and verify that their DKIM public keys are valid and accessible."
+  dkim_key_unknown: "A DKIM selector was identified, but its public key could not be validated. It may be revoked, malformed or use an unsupported algorithm."
+  dkim_other_key_unknown: "The public key for selector `{selector}` could not be validated and should be reviewed separately."
+  dkim_sample_key: "The supplied email identified selector `{selector}` for signing domain `{domain}`. Its DNS key assessment was {assessment}; this does not independently verify the signature or establish DMARC alignment."
+  dkim_sample_error: "The supplied email's signing-domain key lookup failed: {error}."
+  dmarc_invalid_record: "The DMARC record contained invalid or duplicated settings, so its effective policy could not be confirmed."
+  dmarc_invalid_record_recommendation: "Correct the invalid or duplicate DMARC records and tags, then verify the effective policy."
+  dmarc_monitoring_recommendation: "Review DMARC aggregate reports and legitimate senders, then move towards quarantine or rejection when ready."
+  mta_enforcement_recommendation: "Validate the MTA-STS policy and receiving mail servers, then move to enforce mode when ready."
   dkim_dns_unknown: "DKIM support could not be confirmed because one or more selector DNS lookups failed."
   dkim_dns_partial: "Some other DKIM selector DNS lookups failed, so discovery was incomplete."
   dmarc_unknown: "The DMARC configuration could not be determined from the available DNS evidence."
@@ -30,9 +42,9 @@ commentary:
     controls_configuration_summary: '### Controls Configuration Summary'
   _build_spf_commentary:
     sender_policy_framework_spf: '### Sender Policy Framework (SPF)'
-    the_domain_implemented_spf_using_a_restrictive: The domain implemented SPF using a restrictive hard-fail
-      enforcement policy (`-all`), helping receiving mail systems identify authorised sending infrastructure
-      and reject unauthorised sources.
+    the_domain_implemented_spf_using_a_restrictive: The SPF record used a hard-fail policy (`-all`)
+      as its first `all` mechanism. Senders not matched earlier receive an SPF fail result; recipients
+      decide how to handle it. The complete sending policy was not independently evaluated.
     the_domain_implemented_spf_and_identified_authorised: The domain implemented SPF and identified authorised
       mail infrastructure. A soft-fail policy (`~all`) was observed. Whilst less restrictive than a hard-fail
       policy, SPF should still provide value when combined with DMARC enforcement.
@@ -42,10 +54,8 @@ commentary:
       identified:'
     spf_temperror_observed: Authentication results extracted from the
       supplied email sample indicated an SPF temporary processing error (temperror).
-    this_suggests_that_receiving_mail_systems_were: This suggests that receiving mail systems were unable
-      to successfully complete SPF evaluation. A controlled spoofing assessment further demonstrated that
-      a spoofed email claiming to originate from the target domain could be successfully delivered, indicating
-      that the intended anti-spoofing protections may not be operating effectively in practice.
+    this_suggests_that_receiving_mail_systems_were: This suggests that the receiving mail system was unable
+      to complete SPF evaluation for the supplied message.
     the_spf_record_utilised_the_permissive_all: The SPF record utilised the permissive `{policy}` mechanism,
       effectively authorising any host on the Internet to send email on behalf of the domain. This significantly
       reduces the effectiveness of SPF as an anti-spoofing control and may increase exposure to email
@@ -93,9 +103,9 @@ commentary:
     as_a_result_receiving_organisations_are_not: As a result, receiving organisations are not provided
       with guidance on how to handle messages that fail SPF or DKIM validation, reducing the effectiveness
       of the domain's email authentication controls.
-    although_this_configuration_provides_visibility_through_reporting: Although this configuration provides
-      visibility through reporting, it does not provide meaningful protection against domain spoofing
-      or email impersonation attacks.
+    although_this_configuration_provides_visibility_through_reporting: Although this configuration can
+      provide visibility when reports are configured and reviewed, it does not request that recipients
+      quarantine or reject messages that fail DMARC.
   _build_mta_sts_commentary:
     mail_transfer_agent_strict_transport_security_mta: '### Mail Transfer Agent Strict Transport Security
       (MTA-STS)'
@@ -205,8 +215,8 @@ remediation:
 
       Following implementation, the effectiveness of the controls should be validated through periodic
       reviews and testing to ensure they continue to operate as intended.'
-    the_assessment_identified_the_absence_of_spf: The assessment identified the absence of SPF, DKIM,
-      DMARC and MTA-STS controls. The organisation should implement a baseline email security framework
+    the_assessment_identified_the_absence_of_spf: SPF, DMARC and MTA-STS records were not identified,
+      and DKIM could not be confirmed using the tested selectors. The organisation should review its email security framework
       consisting of these mechanisms to improve protection against spoofing, impersonation and insecure
       email transport.
     follow_up_after_paragraph: '

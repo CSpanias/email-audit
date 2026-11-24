@@ -2,9 +2,15 @@
 MTA-STS record retrieval, parsing and assessment.
 """
 
+import re
+import shlex
 import urllib.request
 
 from email_audit.dns.lookup import get_txt_records
+
+
+class MtaStsPolicyError(Exception):
+    """The HTTPS policy could not be retrieved or decoded."""
 
 
 # ---------------------------------------------------------------------------
@@ -15,7 +21,10 @@ def check_mta_sts(domain):
     Retrieve the MTA-STS DNS TXT record for a target domain.
     """
 
-    return "\n".join(get_txt_records(f"_mta-sts.{domain}"))
+    return "\n".join(
+        record for record in get_txt_records(f"_mta-sts.{domain}")
+        if re.match(r"^v=STSv1(?:\s*;|\s*$)", record)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -35,8 +44,8 @@ def get_mta_sts_policy(domain):
                 .decode()
                 .strip()
             )
-    except Exception:
-        return ""
+    except (OSError, UnicodeError) as exc:
+        raise MtaStsPolicyError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -54,24 +63,30 @@ def parse_mta_sts_policy(policy):
         "version": "",
         "mode": "",
         "mx": [],
-        "max_age": ""
+        "max_age": "",
+        "errors": [],
     }
 
     if not policy:
         return result
 
+    seen = set()
     for line in policy.splitlines():
 
         line = line.strip()
 
         if ":" not in line:
+            result["errors"].append(f"Malformed policy line: {line}")
             continue
 
         key, value = line.split(":", 1)
 
-        key = key.strip().lower()
+        key = key.strip()
         value = value.strip()
 
+        if key in {"version", "mode", "max_age"} and key in seen:
+            result["errors"].append(f"Duplicate policy {key}")
+        seen.add(key)
         if key == "version":
             result["version"] = value
 
@@ -90,7 +105,7 @@ def parse_mta_sts_policy(policy):
 # ---------------------------------------------------------------------------
 # MTA-STS Assessment
 # ---------------------------------------------------------------------------
-def assess_mta_sts(record, policy, dns_error=None):
+def assess_mta_sts(record, policy, dns_error=None, policy_error=None):
     """
     Assess the security posture of an MTA-STS deployment.
 
@@ -121,7 +136,56 @@ def assess_mta_sts(record, policy, dns_error=None):
 
         return result
 
-    # DNS record exists
+    if policy_error:
+        result["policy_error"] = policy_error
+        result["breakdown"].append(f"HTTPS policy lookup failed: {policy_error}")
+        result["impact"] = "The MTA-STS policy could not be retrieved."
+        return result
+
+    result["policy"] = policy
+    errors = list(policy.get("errors", []))
+    records = record.splitlines()
+    if len(records) != 1:
+        errors.append("Multiple MTA-STS DNS records were identified")
+    else:
+        try:
+            dns_record = "".join(shlex.split(records[0])) if records[0].lstrip().startswith('"') else records[0]
+        except ValueError:
+            dns_record = ""
+        fields = [part.strip() for part in dns_record.split(";") if part.strip()]
+        if not fields or fields[0] != "v=STSv1":
+            errors.append("Invalid MTA-STS DNS version")
+        ids = [part.partition("=")[2].strip() for part in fields[1:]
+               if part.partition("=")[0].strip() == "id" and "=" in part]
+        if len(ids) != 1 or not re.fullmatch(r"[A-Za-z0-9]{1,32}", ids[0]):
+            errors.append("Missing, duplicated or invalid MTA-STS DNS id")
+
+    if policy.get("version") != "STSv1":
+        errors.append("Missing or invalid MTA-STS policy version")
+    if policy.get("mode") not in {"enforce", "testing", "none"}:
+        errors.append("Missing or invalid MTA-STS policy mode")
+    max_age = policy.get("max_age", "")
+    if (not max_age.isascii() or not max_age.isdecimal()
+            or len(max_age) > 10 or int(max_age) > 31557600):
+        errors.append("Missing or invalid MTA-STS policy max_age")
+    mx_patterns = policy.get("mx", [])
+    if policy.get("mode") in {"enforce", "testing"} and not mx_patterns:
+        errors.append("MTA-STS policy requires at least one mx pattern")
+    for mx in mx_patterns:
+        hostname = mx[2:] if mx.startswith("*.") else mx
+        labels = hostname.split(".")
+        if not hostname or len(hostname) > 253 or any(
+            not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+            for label in labels
+        ):
+            errors.append(f"Invalid MTA-STS mx pattern: {mx}")
+
+    if errors:
+        result["validation_errors"] = errors
+        result["breakdown"].extend(errors)
+        result["impact"] = "The MTA-STS DNS record or HTTPS policy could not be validated."
+        return result
+
     result["breakdown"].append("Domain advertises support for MTA-STS")
 
     if policy["version"]:
@@ -156,7 +220,5 @@ def assess_mta_sts(record, policy, dns_error=None):
 
         result["impact"] = ("MTA-STS support is advertised, but the policy could not be retrieved or parsed successfully.")
         result["assessment"] = "UNKNOWN"
-
-    result["policy"] = policy
 
     return result

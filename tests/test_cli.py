@@ -148,7 +148,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("p=<public key>", text)
         self.assertIn("Public key used to verify signatures", text)
         self.assertIn("Selector extracted from supplied email: sample", text)
-        self.assertIn("DKIM RSA public key could not be decoded", text)
+        self.assertIn("DKIM public key could not be decoded", text)
 
     def test_other_records_explain_fields_and_keep_invalid_diagnostics(self):
         results = [
@@ -472,7 +472,7 @@ class CliTests(unittest.TestCase):
             stack.enter_context(patch.object(spoof.sys, "platform", "linux"))
             stack.enter_context(patch.object(spoof.os, "geteuid", return_value=0, create=True))
             stack.enter_context(patch.object(spoof, "which", return_value="/usr/bin/service"))
-            stack.enter_context(patch.object(spoof, "run_command", return_value="queued as 1"))
+            stack.enter_context(patch.object(spoof, "run_command", return_value=(0, "queued as 1")))
             service = stack.enter_context(patch.object(spoof.subprocess, "run", side_effect=[
                 SimpleNamespace(returncode=0, stdout="", stderr=""),
                 SimpleNamespace(returncode=0),
@@ -489,6 +489,26 @@ class CliTests(unittest.TestCase):
 
 
 class SpoofRelayTests(unittest.TestCase):
+    def test_swaks_nonzero_smtp_rejection_is_distinct_from_other_failures(self):
+        for output, expected in (
+            ("<** 550 5.7.1 denied", "REJECTED BY SMTP RELAY"),
+            ("<** 450 4.7.1 temporarily unavailable", "UNKNOWN"),
+            ("connection failed; rejected=not-an-smtp-reply", "UNKNOWN"),
+        ):
+            with self.subTest(output=output), contextlib.ExitStack() as stack:
+                stack.enter_context(patch.object(spoof, "which", return_value="swaks"))
+                stack.enter_context(patch.object(spoof, "ensure_local_smtp", return_value=None))
+                stack.enter_context(patch(
+                    "email_audit.utils.subprocess.run",
+                    return_value=SimpleNamespace(returncode=1, stdout=output),
+                ))
+                result = spoof.perform_spoof_test("example.test", "recipient@example.test", stack)
+                self.assertEqual(result["assessment"], expected)
+                if expected == "REJECTED BY SMTP RELAY":
+                    self.assertIn("recipient-side enforcement was not tested", result["impact"])
+                else:
+                    self.assertIn(output, result["impact"])
+
     def test_relay_check_requires_an_smtp_greeting(self):
         with patch.object(spoof.smtplib, "SMTP", side_effect=smtplib.SMTPServerDisconnected):
             self.assertFalse(spoof.smtp_server_running())
@@ -585,7 +605,7 @@ class SpoofRelayTests(unittest.TestCase):
                         SimpleNamespace(returncode=3, stdout="", stderr=""),
                     ]
                 ))
-                send = stack.enter_context(patch.object(spoof, "run_command", return_value="queued as 1"))
+                send = stack.enter_context(patch.object(spoof, "run_command", return_value=(0, "queued as 1")))
                 with contextlib.ExitStack() as cleanup:
                     result = spoof.perform_spoof_test("example.test", "recipient@example.test", cleanup)
                     self.assertEqual(service.call_count, 2)

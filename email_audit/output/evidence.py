@@ -77,7 +77,9 @@ def report_configuration_validation(results):
     table.add_column("Status")
 
     # SPF
-    if spf.get("all_policy") == "-all":
+    if spf.get("record_error"):
+        spf_config = "Unknown (invalid record)"
+    elif spf.get("all_policy") == "-all":
         spf_config = "Hard Fail (-all)"
     elif spf.get("all_policy") == "~all":
         spf_config = "Soft Fail (~all)"
@@ -85,6 +87,8 @@ def report_configuration_validation(results):
         spf_config = f"Permissive ({spf['all_policy']})"
     else:
         spf_config = "Not Present" if spf["assessment"] == "MISSING" else "Unknown"
+    if spf.get("broad_mechanism"):
+        spf_config += " (broad allowance)"
 
     # DKIM
     selector = "Unknown"
@@ -102,14 +106,17 @@ def report_configuration_validation(results):
     # DMARC
     policy = dmarc.get("tags", {}).get("p", "").lower()
     dmarc_config = DMARC_MAP.get(policy, "Not Present" if dmarc["assessment"] == "MISSING" else "Unknown")
-    if dmarc.get("coverage_limited"):
+    if dmarc.get("record_errors"):
+        dmarc_config = "Unknown (invalid record)"
+    elif dmarc.get("coverage_limited"):
         dmarc_config += " (limited)"
     elif dmarc.get("coverage_errors") and policy in {"reject", "quarantine"}:
         dmarc_config += " (coverage unknown)"
 
     # MTA-STS
     mode = mta.get("policy", {}).get("mode", "")
-    mta_config = MTA_MAP.get(mode, "Not Present" if mta["assessment"] == "MISSING" else "Unknown")
+    mta_config = ("Unknown" if mta["assessment"] == "UNKNOWN" else
+                  MTA_MAP.get(mode, "Not Present" if mta["assessment"] == "MISSING" else "Unknown"))
 
     table.add_row("SPF", Text(spf_config), rich_assessment_colour(spf["assessment"]))
     table.add_row("DKIM", Text(selector), rich_assessment_colour(dkim["assessment"]))

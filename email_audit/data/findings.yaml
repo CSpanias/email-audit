@@ -9,7 +9,21 @@ permissive-spf:
   description: "The SPF record for {domain} uses a permissive 'all' mechanism, permitting any host on the Internet to send email on behalf of the domain."
 missing-dkim:
   sureformat_id: SC-2165
-  description: "No DKIM selector could be identified for {domain}."
+  description: "No usable DKIM public key could be confirmed for {domain} using the tested selectors; other selectors may exist."
+broad-spf:
+  description: "The SPF mechanism {mechanism} for {domain} can permit a broad range of senders in an IP address family."
+invalid-spf:
+  description: "The SPF configuration for {domain} is invalid: {reason}."
+unconfirmed-dkim-key:
+  description: "The DKIM public key for selector {selector} on {domain} could not be validated; it may be revoked, malformed or unsupported."
+monitoring-dmarc:
+  description: "The DMARC policy for {domain} is monitoring-only and does not request quarantine or rejection of failing messages."
+limited-dmarc:
+  description: "The DMARC policy for {domain} has sampling or testing settings that may reduce enforcement."
+invalid-dmarc:
+  description: "The DMARC record for {domain} contains invalid or duplicate settings that require review."
+non-enforcing-mta-sts:
+  description: "The MTA-STS policy for {domain} uses {mode} mode and does not enforce transport security."
 missing-dmarc:
   sureformat_id: SC-2166
   description: "No DMARC record was identified for {domain}."

@@ -10,15 +10,24 @@ failures; receivers retain their own handling decisions.
 
 The tool queries TXT records at `_dmarc.<domain>`, parses tags and classifies
 `p=reject` as secure, `p=quarantine` as acceptable and `p=none` as insecure
-when no reduced-coverage setting is present. It also displays selected tags such as `pct`, `t`, `rua`, `sp`, `adkim` and
-`aspf` when present.
+when no reduced-coverage setting is present. It also displays selected tags
+when present.
 
 ```text
 v=DMARC1; p=reject; rua=mailto:dmarc@example.com
 ```
 
-`rua` specifies an aggregate reporting destination. `sp` supplies a
-subdomain policy; `adkim` and `aspf` indicate strict or relaxed alignment.
+| Field | Meaning |
+|---|---|
+| `v=` | DMARC version. |
+| `p=` | Requested policy for the domain. |
+| `sp=` | Requested policy for subdomains. |
+| `rua=` | Destination for aggregate reports. |
+| `fo=` | Conditions for requesting failure reports. |
+| `adkim=` / `aspf=` | DKIM / SPF alignment mode. |
+| `pct=` | Legacy percentage for policy sampling. |
+| `t=` | Policy testing flag. |
+
 The legacy `pct` tag requested the policy for a percentage of messages.
 For example, `p=reject; pct=0` could lead older receivers to quarantine
 rather than reject failing messages. The current DMARC specification replaced
@@ -29,6 +38,8 @@ The tool conservatively marks `p=reject` with `pct` below 100 or `t=y` as
 acceptable rather than secure, and `p=quarantine` with either setting as
 insecure rather than acceptable. Invalid or duplicated coverage tags make
 an enforcing policy's assessment inconclusive. `p=none` remains monitoring-only.
+Multiple DMARC records, duplicate policy tags and invalid policy or alignment
+values are also flagged for review rather than classified as enforced.
 
 | Policy | Behaviour | Use case |
 |---|---|---|

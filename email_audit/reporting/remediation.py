@@ -38,11 +38,11 @@ def build_references(results, auth_results=None, spoof_result=None):
     if weak_dkim_keys(dkim):
         refs.add("dkim_crypto")
 
-    if dmarc["assessment"] in ["MISSING", "UNKNOWN"] or dmarc.get("coverage_limited"):
+    if dmarc["assessment"] in ["MISSING", "UNKNOWN", "INSECURE"] or dmarc.get("coverage_limited"):
         refs.add("dmarc")
         refs.add("dmarc_org")
 
-    if mta["assessment"] in ["MISSING", "UNKNOWN"]:
+    if mta["assessment"] in ["MISSING", "UNKNOWN", "INSECURE", "ACCEPTABLE"]:
         refs.add("mta_sts")
     tls_rpt = next((result for result in results if result["control"] == "TLS-RPT"), None)
     if tls_rpt and tls_rpt["assessment"] in ["MISSING", "INVALID"]:
@@ -99,11 +99,17 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
             spf["assessment"] == "MISSING"
             and dkim["assessment"] == "UNKNOWN"
             and not dkim.get("dns_errors")
+            and not dkim.get("raw")
             and dmarc["assessment"] == "MISSING"
             and mta["assessment"] == "MISSING"
         )
 
-    if spf["assessment"] == "MISSING":
+    if spf.get("broad_mechanism"):
+        recommendations.append(ADDITIONAL["broad_spf_recommendation"].format(
+            mechanism=spf["broad_mechanism"]))
+    elif spf.get("record_error") or (spf["assessment"] == "UNKNOWN" and not spf.get("dns_error")):
+        recommendations.append(ADDITIONAL["spf_review_recommendation"])
+    elif spf["assessment"] == "MISSING":
         recommendations.append(
             TEXT['build_recommendations']['publish_an_spf_record_to_explicitly_define']
         )
@@ -116,19 +122,23 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
         )
 
     if dkim["assessment"] == "UNKNOWN" and not dkim.get("dns_errors"):
-        recommendations.append(
-            TEXT['build_recommendations']['configure_dkim_signing_and_ensure_the_associated']
-        )
+        recommendations.append(ADDITIONAL["dkim_review_recommendation"])
+    elif any(key.get("key_assessment") == "UNKNOWN" for key in dkim.get("key_observations", [])):
+        recommendations.append(ADDITIONAL["dkim_review_recommendation"])
 
     if dmarc["assessment"] == "MISSING":
         recommendations.append(
             TEXT['build_recommendations']['implement_dmarc_with_an_appropriate_reporting_and']
         )
 
+    elif dmarc.get("record_errors"):
+        recommendations.append(ADDITIONAL["dmarc_invalid_record_recommendation"])
     elif dmarc.get("coverage_limited"):
         recommendations.append(ADDITIONAL["dmarc_limited_recommendation"])
     elif dmarc.get("coverage_errors"):
         recommendations.append(ADDITIONAL["dmarc_invalid_coverage_recommendation"])
+    if not dmarc.get("record_errors") and dmarc.get("tags", {}).get("p", "").lower() == "none":
+        recommendations.append(ADDITIONAL["dmarc_monitoring_recommendation"])
 
     if mta["assessment"] == "MISSING":
         recommendations.append(
@@ -139,6 +149,8 @@ def build_recommendations(results, auth_results=None, spoof_result=None):
         recommendations.append(
             TEXT['build_recommendations']['review_the_published_mta_sts_configuration_and']
         )
+    elif mta["assessment"] in {"INSECURE", "ACCEPTABLE"}:
+        recommendations.append(ADDITIONAL["mta_enforcement_recommendation"])
 
     # -----------------------------------------------------------------------
     # Authentication Validation

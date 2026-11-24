@@ -18,6 +18,7 @@ from email_audit.dns.spf import (
 )
 
 from email_audit.dns.dkim import (
+    assess_dkim,
     assess_dkim_records,
     check_dkim_dns,
     check_dkim_selectors,
@@ -29,6 +30,7 @@ from email_audit.dns.dmarc import (
 )
 
 from email_audit.dns.mta_sts import (
+    MtaStsPolicyError,
     assess_mta_sts,
     check_mta_sts,
     get_mta_sts_policy,
@@ -146,16 +148,22 @@ def process_email_sample(domain, email_file, results, dkim_records, dkim_errors)
 
         auth_results = parse_eml_file(email_file)
 
-        if auth_results["dkim_selector"]:
+        signing_domain = auth_results.get("dkim_domain", "").rstrip(".")
+        if auth_results["dkim_selector"] and signing_domain:
 
             try:
-                selected = check_dkim_dns(domain, auth_results["dkim_selector"])
+                selected = check_dkim_dns(signing_domain, auth_results["dkim_selector"])
             except DNSLookupError as exc:
-                dkim_errors.append(str(exc))
+                auth_results["dkim_lookup_error"] = str(exc)
+                if signing_domain.lower() == domain.rstrip(".").lower():
+                    dkim_errors.append(str(exc))
                 selected = None
-            results[1] = assess_dkim_records(
-                dkim_records, auth_results if selected else None, selected, dkim_errors
-            )
+            if selected:
+                auth_results["dkim_sample_key"] = assess_dkim(*selected)
+            if signing_domain.lower() == domain.rstrip(".").lower():
+                results[1] = assess_dkim_records(
+                    dkim_records, selected=selected, dns_errors=dkim_errors
+                )
 
         return auth_results
 
@@ -211,7 +219,13 @@ def _run_assessment(cleanup):
         dmarc_record, dmarc_error = _lookup_record(get_dmarc_record, args.domain)
         progress.update(task, advance=1, description="Checking MTA-STS", refresh=True)
         mta_record, mta_error = _lookup_record(check_mta_sts, args.domain)
-        mta_policy_raw = get_mta_sts_policy(args.domain) if mta_error is None else ""
+        mta_policy_error = None
+        mta_policy_raw = ""
+        if mta_record and mta_error is None:
+            try:
+                mta_policy_raw = get_mta_sts_policy(args.domain)
+            except MtaStsPolicyError as exc:
+                mta_policy_error = str(exc)
         mta_policy = parse_mta_sts_policy(mta_policy_raw)
         progress.update(task, advance=1, description="Checking TLS-RPT", refresh=True)
         tls_rpt_records, tls_rpt_error = get_tls_rpt_records(args.domain)
@@ -228,6 +242,7 @@ def _run_assessment(cleanup):
             mta_record,
             mta_policy,
             mta_error,
+            mta_policy_error,
         ),
         assess_tls_rpt(tls_rpt_records, tls_rpt_error),
     ]

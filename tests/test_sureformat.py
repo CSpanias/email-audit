@@ -86,6 +86,16 @@ class SureFormatTests(unittest.TestCase):
                     with open(json_file, encoding="utf-8") as file:
                         self.assertEqual(json.load(file)["findings"], findings)
 
+    def test_known_finding_without_a_sureformat_mapping_is_reported_as_omitted(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            filename, count = export_sureformat("example.test", [
+                {"id": "monitoring-dmarc", "description": "Monitoring only"},
+            ])
+        self.assertEqual(count, 0)
+        self.assertEqual(ET.parse(filename).getroot().findall(".//vulnerability"), [])
+        self.assertIn("monitoring-dmarc", output.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
