@@ -43,7 +43,7 @@ def build_commentary(domain, results, auth_results=None, spoof_result=None):
     _build_dmarc_commentary(text, dmarc)
     _build_mta_sts_commentary(text, mta)
     _build_additional_commentary(text, results)
-    _build_spoofing_commentary(text, spoof_result)
+    _build_spoofing_commentary(text, spoof_result, spf, dkim, dmarc)
 
     return "\n".join(text)
 
@@ -76,13 +76,13 @@ def _build_summary_table(text, spf, dkim, dmarc, mta, tls_rpt):
 
     # SPF value
     if "-all" in spf["raw"]:
-        spf_config = "Hard Fail (-all)"
+        spf_config = "Hard Fail (`-all`)"
 
     elif "~all" in spf["raw"]:
-        spf_config = "Soft Fail (~all)"
+        spf_config = "Soft Fail (`~all`)"
 
     elif "+all" in spf["raw"]:
-        spf_config = "Permissive (+all)"
+        spf_config = "Permissive (`+all`)"
 
     else:
         spf_config = "Not Present"
@@ -378,6 +378,7 @@ def _build_dmarc_commentary(text, dmarc):
 
         elif dmarc["assessment"] == "INSECURE":
 
+            text.append("")
             text.append(
                 TEXT['_build_dmarc_commentary']['although_this_configuration_provides_visibility_through_reporting']
             )
@@ -483,7 +484,7 @@ def _build_mta_sts_commentary(text, mta):
 # ---------------------------------------------------------------------------
 # Controlled Spoofing Assessment
 # ---------------------------------------------------------------------------
-def _build_spoofing_commentary(text, spoof_result):
+def _build_spoofing_commentary(text, spoof_result, spf, dkim, dmarc):
     """
     Build the spoofing assessment commentary section.
     """
@@ -502,9 +503,18 @@ def _build_spoofing_commentary(text, spoof_result):
 
         text.append("")
 
-        text.append(
-            TEXT['_build_spoofing_commentary']['although_email_authentication_controls_were_present_testing']
-        )
+        spoof_text = TEXT['_build_spoofing_commentary']
+        if (
+            spf["assessment"] != "MISSING"
+            and dkim["assessment"] == "PRESENT"
+            and dmarc["assessment"] != "MISSING"
+        ):
+            text.append(spoof_text["controls_present"])
+        else:
+            text.append(spoof_text["controls_unconfirmed"])
+
+        text.append(spoof_text[f"dmarc_{dmarc['assessment'].lower()}"])
+        text.append(spoof_text["delivery_cause_unconfirmed"])
 
     else:
 

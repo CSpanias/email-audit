@@ -31,6 +31,12 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
         evidence.append(TEXT["sample_incomplete"])
     else:
         evidence.append(TEXT["sample_not_supplied"])
+    if dmarc["assessment"] == "INSECURE":
+        evidence.append(TEXT["sender_protection_monitoring"])
+    elif spf["assessment"] == "INSECURE":
+        evidence.append(TEXT["sender_protection_weak"])
+    elif any(control["assessment"] == "UNKNOWN" for control in (spf, dmarc)):
+        evidence.append(TEXT["sender_protection_unconfirmed"])
     summary.append(" ".join(evidence))
 
     spoof_delivered = bool(spoof_result and spoof_result.get("successful"))
@@ -40,11 +46,6 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
         summary.append(TEXT["impersonation_not_delivered"])
 
     issues = []
-    if any(control["assessment"] == "INSECURE" for control in (spf, dmarc)):
-        issues.append(TEXT["sender_protection_weak"])
-    elif any(control["assessment"] == "UNKNOWN" for control in (spf, dmarc)):
-        issues.append(TEXT["sender_protection_unconfirmed"])
-
     if mta["assessment"] == "MISSING":
         issues.append(TEXT["transport_missing"])
     elif mta["assessment"] in ("INSECURE", "ACCEPTABLE"):
@@ -66,7 +67,10 @@ def build_executive_summary(domain, results, auth_results=None, spoof_result=Non
 
     if spoof_delivered:
         summary.append(TEXT["conclusion_impersonation"])
-    elif issues or not controls_present or "fail" in authentication:
+    elif (
+        issues or not controls_present or "fail" in authentication
+        or any(control["assessment"] in {"INSECURE", "UNKNOWN"} for control in (spf, dmarc))
+    ):
         summary.append(TEXT["conclusion_improvements"])
     else:
         summary.append(TEXT["conclusion"])

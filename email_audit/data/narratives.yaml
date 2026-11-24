@@ -1,11 +1,11 @@
 additional_checks:
-  weak_dkim: "The DKIM selector {selector} uses a {bits}-bit RSA public key, below the recommended minimum of 2048 bits."
+  weak_dkim: "The DKIM selector `{selector}` uses a {bits}-bit RSA public key, below the recommended minimum of 2048 bits. A weaker key is more susceptible to cryptographic attacks, which could allow attackers to forge signatures and impersonate the domain."
   tls_rpt_heading: "### SMTP TLS Reporting (TLS-RPT)"
   tls_rpt_present: "A TLS-RPT policy with reporting destinations was identified. Publication does not establish that reports are received or reviewed."
   tls_rpt_missing: "No TLS-RPT policy was identified. The domain owner may not receive reports about SMTP TLS delivery failures."
   tls_rpt_invalid: "A TLS-RPT policy was identified, but its reporting configuration is invalid: {reason}."
   tls_rpt_unknown: "The TLS-RPT policy could not be assessed because the DNS lookup or response could not be processed."
-  weak_dkim_recommendation: "Replace the RSA key for DKIM selector {selector} with a key of at least 2048 bits and coordinate key rotation with the email provider."
+  weak_dkim_recommendation: "Replace the RSA key for DKIM selector `{selector}` with a key of at least 2048 bits and coordinate key rotation with the email provider."
   tls_rpt_missing_recommendation: "Publish a TLS-RPT DNS record with a valid reporting destination and review the resulting reports."
   tls_rpt_invalid_recommendation: "Correct the TLS-RPT DNS record and verify its version and reporting destination."
 commentary:
@@ -18,10 +18,10 @@ commentary:
   _build_spf_commentary:
     sender_policy_framework_spf: '### Sender Policy Framework (SPF)'
     the_domain_implemented_spf_using_a_restrictive: The domain implemented SPF using a restrictive hard-fail
-      enforcement policy (-all), helping receiving mail systems identify authorised sending infrastructure
+      enforcement policy (`-all`), helping receiving mail systems identify authorised sending infrastructure
       and reject unauthorised sources.
     the_domain_implemented_spf_and_identified_authorised: The domain implemented SPF and identified authorised
-      mail infrastructure. A soft-fail policy (~all) was observed. Whilst less restrictive than a hard-fail
+      mail infrastructure. A soft-fail policy (`~all`) was observed. Whilst less restrictive than a hard-fail
       policy, SPF should still provide value when combined with DMARC enforcement.
     the_following_authorised_sending_services_were_identified: 'The following authorised sending services
       were identified:'
@@ -33,7 +33,7 @@ commentary:
       to successfully complete SPF evaluation. A controlled spoofing assessment further demonstrated that
       a spoofed email claiming to originate from the target domain could be successfully delivered, indicating
       that the intended anti-spoofing protections may not be operating effectively in practice.
-    the_spf_record_utilised_the_permissive_all: The SPF record utilised the permissive '+all' mechanism,
+    the_spf_record_utilised_the_permissive_all: The SPF record utilised the permissive `+all` mechanism,
       effectively authorising any host on the Internet to send email on behalf of the domain. This significantly
       reduces the effectiveness of SPF as an anti-spoofing control and may increase exposure to email
       impersonation attacks.
@@ -112,50 +112,67 @@ commentary:
     a_controlled_spoofing_assessment_identified_that_an: A controlled spoofing assessment identified that
       an email claiming to originate from the target domain could be successfully generated and delivered
       during testing.
-    although_email_authentication_controls_were_present_testing: Although email authentication controls
-      were present, testing demonstrated that these controls did not effectively prevent delivery of a
-      spoofed message.
-    testing_did_not_identify_evidence_that_a: Testing did not identify evidence that a spoofed email could
-      be successfully delivered.
+    controls_present: SPF, DKIM and DMARC records were identified; however, their presence alone does not
+      ensure that a spoofed message will be blocked.
+    controls_unconfirmed: Not all SPF, DKIM and DMARC controls could be confirmed during the assessment.
+    dmarc_insecure: The DMARC policy is `p=none`, a monitoring-only policy that does not request rejection
+      or quarantine of messages that fail DMARC. Depending on the recipient's filtering, this may allow
+      such messages to be delivered.
+    dmarc_missing: No DMARC policy was identified, so recipients were not given a domain-specific request
+      to quarantine or reject messages that fail DMARC.
+    dmarc_secure: The DMARC policy requests rejection of messages that fail DMARC (`p=reject`), subject
+      to the policy's scope and the recipient's handling.
+    dmarc_acceptable: The DMARC policy requests quarantine rather than rejection of messages that fail
+      DMARC (`p=quarantine`); recipients determine how to handle them.
+    dmarc_unknown: The DMARC policy's enforcement could not be determined.
+    delivery_cause_unconfirmed: The spoofed message's authentication results were not analysed; review its
+      headers and the recipient's handling to determine why it was delivered.
+    testing_did_not_identify_evidence_that_a: The spoofing test did not result in confirmed delivery.
+      This does not demonstrate that all spoofed messages would be blocked.
 executive_summary:
-  introduction: An email security review was performed for {domain} to assess how well the organisation
-    protects its email communications and recipients.
-  controls_present: Measures to help recipients verify the origin of email were identified.
-  controls_unconfirmed: Not all measures to help recipients verify the origin of email could be confirmed.
-  sample_passed: The supplied email passed the checks recorded for that message, but this does not
-    demonstrate that fraudulent messages will always be blocked.
+  introduction: An email security review was performed against the {domain} domain to assess the
+    effectiveness of controls protecting email communications.
+  controls_present: Controls intended to verify the origin of email were identified.
+  controls_unconfirmed: Not all controls intended to verify the origin of email could be confirmed.
+  sample_passed: The checks recorded for the supplied email passed, indicating that the receiving system
+    verified that message.
   sample_failed: One or more checks recorded for the supplied email failed and should be investigated.
   sample_incomplete: The supplied email did not contain enough information to determine the outcome of
     all relevant checks.
-  sample_not_supplied: No email sample was supplied to check how these measures operated for a message.
-  impersonation_delivered: In a separate test, a message pretending to come from {domain} was delivered.
-    This demonstrates that a fraudulent message could reach a recipient, increasing the risk of deception,
-    disclosure of sensitive information and financial loss.
+  sample_not_supplied: No email sample was supplied to provide evidence of these checks in practice.
+  sender_protection_monitoring: The domain's policy does not request that messages failing verification
+    be blocked.
+  sender_protection_weak: Some sender verification settings are permissive, which could increase the risk
+    of impersonation.
+  sender_protection_unconfirmed: The effectiveness of some sender verification settings could not be
+    confirmed.
+  impersonation_delivered: A separate controlled test successfully delivered a message impersonating
+    {domain}. This demonstrates that fraudulent messages can reach recipients, increasing the risk of
+    phishing, financial loss and disclosure of sensitive information.
   impersonation_not_delivered: A separate impersonation test did not result in confirmed delivery.
     This does not rule out fraudulent messages reaching other recipients.
-  additional_issues: The review also identified areas where email security could be strengthened.
-  sender_protection_weak: Some measures for identifying fraudulent messages are not sufficiently
-    restrictive, increasing the risk of impersonation.
-  sender_protection_unconfirmed: The effectiveness of some measures for identifying fraudulent messages
-    could not be confirmed.
-  transport_missing: Additional protection for email in transit was not identified, increasing the
-    possibility that messages could be intercepted or altered.
-  transport_not_enforced: Additional protection for email in transit was not fully enforced, increasing
-    the possibility that messages could be intercepted or altered.
-  transport_unconfirmed: Additional protection for email in transit could not be confirmed, limiting
-    assurance that messages are protected from interception or alteration.
-  weak_signing_key: A weak safeguard used to verify messages could undermine confidence in their origin
-    and integrity.
-  delivery_reporting_unavailable: Problems protecting email in transit may go unreported, delaying their
-    discovery and resolution.
-  delivery_reporting_unconfirmed: Reporting of problems protecting email in transit could not be confirmed,
-    limiting confidence that such problems would be identified promptly.
-  conclusion_impersonation: Overall, the successful impersonation test shows that further action is needed
-    to reduce the risk of fraudulent email reaching recipients.
-  conclusion_improvements: Overall, further action is needed to improve confidence in the security of
-    email communications.
+  additional_issues: The assessment also identified opportunities to strengthen the protection of email
+    communications.
+  transport_missing: Without additional protection for messages in transit, they may be more exposed
+    to interception or alteration.
+  transport_not_enforced: Additional protection for messages in transit is not fully enforced, which may
+    increase their exposure to interception or alteration.
+  transport_unconfirmed: Additional protection for messages in transit could not be confirmed, limiting
+    assurance that they are protected from interception or alteration.
+  weak_signing_key: A weak verification safeguard may undermine confidence in the authenticity and
+    integrity of messages.
+  delivery_reporting_unavailable: Limited reporting of delivery security issues could delay their
+    detection and resolution.
+  delivery_reporting_unconfirmed: Reporting of delivery security issues could not be confirmed, limiting
+    confidence that such issues would be identified promptly.
+  conclusion_impersonation: Overall, the assessment highlighted opportunities to strengthen email
+    security. Addressing the identified weaknesses and validating improvements can reduce exposure to
+    impersonation and help protect sensitive communications.
+  conclusion_improvements: Overall, the assessment highlighted areas requiring further review. Addressing
+    confirmed weaknesses and validating any changes can help protect the organisation's communications
+    and recipients.
   conclusion: Overall, the review provides a snapshot of email security. Continued monitoring and periodic
-    testing are needed to maintain confidence in these protections.
+    testing will help maintain confidence in these protections.
 remediation:
   build_recommendations:
     the_identified_weaknesses_should_be_addressed_to: 'The identified weaknesses should be addressed to
@@ -187,7 +204,7 @@ remediation:
       enforcement policy to improve protection against spoofing and impersonation attacks.
     deploy_mta_sts_to_strengthen_smtp_transport: Deploy MTA-STS to strengthen SMTP transport security
       and reduce the risk of downgrade attacks.
-    replace_the_all_spf_mechanism_with_a: Replace the '+all' SPF mechanism with a restrictive policy to
+    replace_the_all_spf_mechanism_with_a: Replace the `+all` SPF mechanism with a restrictive policy to
       prevent unauthorised systems from sending email on behalf of the domain.
     review_the_published_mta_sts_configuration_and: Review the published MTA-STS configuration and ensure
       the policy can be successfully retrieved and validated by external systems.
