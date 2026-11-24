@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from unittest.mock import patch
 
 from email_audit import cli
@@ -74,13 +75,15 @@ class SureFormatTests(unittest.TestCase):
                     summary.call_args.kwargs["output_format"], "XML" if flag else "JSON"
                 )
                 if flag:
-                    self.assertTrue(os.path.isfile("example.test.xml"))
+                    self.assertEqual(len(list(Path("email-audit").glob("example.test-*.xml"))), 1)
                     self.assertEqual(summary.call_args.kwargs["exported_count"], 1)
-                    with open("example.test.json", encoding="utf-8") as file:
+                    json_file = next(Path("email-audit").glob("example.test-*.json"))
+                    with open(json_file, encoding="utf-8") as file:
                         self.assertEqual(json.load(file)["findings"], findings)
                 else:
-                    self.assertFalse(os.path.exists("example.test.xml"))
-                    with open("example.test.json", encoding="utf-8") as file:
+                    self.assertFalse(list(Path("email-audit").glob("*.xml")))
+                    json_file = next(Path("email-audit").glob("example.test-*.json"))
+                    with open(json_file, encoding="utf-8") as file:
                         self.assertEqual(json.load(file)["findings"], findings)
 
 

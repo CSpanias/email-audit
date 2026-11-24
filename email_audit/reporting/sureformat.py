@@ -5,7 +5,7 @@ import xml.etree.ElementTree as ET
 from email_audit.reporting.definitions import load_definitions
 
 
-def export_sureformat(domain, findings):
+def export_sureformat(domain, findings, filename=None):
     """Write mapped findings for the assessed domain."""
     root = ET.Element("items", source="SureFormat", version="1.0.0")
     item = ET.SubElement(root, "item", ipaddress="", hostname=domain)
@@ -25,7 +25,8 @@ def export_sureformat(domain, findings):
         ET.SubElement(vulnerability, "information").text = finding["description"]
         exported_count += 1
 
-    filename = f"{domain}.xml"
+    if filename is None:
+        filename = f"{domain}.xml"
     tree = ET.ElementTree(root)
     ET.indent(tree, space="    ")
     tree.write(filename, encoding="utf-8", xml_declaration=False)

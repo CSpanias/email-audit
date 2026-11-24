@@ -96,146 +96,38 @@ email-audit <domain> --csacyber
 
 ## Example Output
 
-These excerpts illustrate the output format; results vary by domain.
-
-```bash
-$ email-audit <domain> --email <domain>.eml --spoof mollysec@lab.com
-
-[*] Retrieving DNS records and analysing email controls for the <domain> domain...
-```
+The checks are displayed in sections with the raw record and its breakdown:
 
 ```text
-=== SPF ===
+[SPF]
 
-Raw Record:
-v=spf1 a:mail.<domain> a:mail2.<domain> a:mail4.<domain> a:em8847.<domain> a:mail03.<domain> a:mail04.<domain> include:theaccessgroupspf.smtp.com include:mail.zendesk.com include:spf.protection.outlook.com -all
-
-Breakdown:
-  - include:theaccessgroupspf.smtp.com → Authorised third-party provider
-  - include:mail.zendesk.com → Authorised third-party provider
-  - include:spf.protection.outlook.com → Authorised third-party provider
-  - -all → SPF enforcement policy
-
-Security Impact:
-  Unauthorised sending mail servers should be rejected.
-
-Assessment:
-  SECURE
+┏━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Field   ┃ Details                        ┃
+┡━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Record  │ v=spf1 -all                    │
+│ Details │ -all → SPF enforcement policy  │
+└─────────┴────────────────────────────────┘
 ```
 
-```text
-=== DKIM ===
+Inconclusive checks include an explanatory note. If an email sample is
+provided, configuration and authentication evidence tables are also shown.
 
-Raw Record:
-selector2-ventrica-co-uk._domainkey.ventricacouk.onmicrosoft.com.
-"v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz+6zgttsPLlvQlDAFtJ9Er7u2YNf8qMVaAdxSJnm7JpXcizQ+ZiN2fB9W0gDlNn2rLzXtm+g2GKp2pQVdypBdNarNvePsiDDygD0Aazhns7J5fXarRYQTOKbMgrZBwbel68efXJmJJMxcsIiK/SgCPP3j4I4nM8fBr9u+wfRrU1QzUztSqoRIjGmdaghBP+yH" "Oga3OG+jvB/PCh8KeT5uOHtlO0M1Lt8tmLWpanudM6w4ZT85rMrC1Feso6qXsEJB7sFagAz6WNzQ2gIb9cHEsrmyaOqU6KbiKH+1VFZch1yJWkRRZBeYE2hP/Jwmv/hjFjww2GcBB1be9nvXQd9gQIDAQAB;"
-
-Breakdown:
-  - Common selector discovered: selector2
-  - Public key present in DNS
-
-Security Impact:
-  The domain supports DKIM signature validation and DKIM was observed to be functioning correctly within the supplied email sample.
-
-Assessment:
-  PRESENT
-```
-
-```text
-=== DMARC ===
-
-Raw Record:
-v=DMARC1; p=quarantine; sp=quarantine; rua=mailto:dmarc@<domain>; ruf=mailto:dmarc@<domain>; rf=afrf; pct=100; ri=86400
-
-Breakdown:
-  - p=quarantine → Failed messages should be treated as suspicious
-  - pct=100 → Policy applies to 100% of messages
-  - rua=mailto:dmarc@<domain> → Aggregate DMARC reports destination
-  - sp=quarantine → Policy applied to subdomains
-
-Security Impact:
-  Messages failing authentication should normally be treated as suspicious.
-
-Assessment:
-  ACCEPTABLE
-```
-
-```text
-=== MTA-STS ===
-
-Breakdown:
-  - No MTA-STS record present
-
-Security Impact:
-  SMTP delivery may rely solely on opportunistic TLS.
-
-Assessment:
-  MISSING
-
-```
-
-```text
-=== SPOOFING TEST ===
-
-Test Details:
-Sender:     ceo@<domain>.com
-Recipient:  mollysec@lab.com
-Subject:    Subject: Controlled Spoofing Assessment
-
-Assessment:
-MESSAGE SUBMITTED
-
-Security Impact:
-  The spoofed email was accepted by the local SMTP relay and submitted for delivery. 
-  Recipient-side validation is required to determine whether SPF, DKIM, and DMARC protections were
-  successfully enforced.
-```
-
-```text
-=== SCREENSHOT EVIDENCE ===
-
-         Configuration Evidence
-┏━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┓
-┃ Control ┃ Configuration    ┃ Status  ┃
-┡━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━┩
-│ SPF     │ Hard Fail (-all) │ SECURE  │
-│ DKIM    │ selector1        │ PRESENT │
-│ DMARC   │ Reject           │ SECURE  │
-│ MTA-STS │ Enforce          │ SECURE  │
-└─────────┴──────────────────┴─────────┘
-
-   Authentication
-      Evidence
-┏━━━━━━━━━┳━━━━━━━━┓
-┃ Control ┃ Result ┃
-┡━━━━━━━━━╇━━━━━━━━┩
-│ SPF     │ PASS   │
-│ DKIM    │ PASS   │
-│ DMARC   │ PASS   │
-└─────────┴────────┘
-
-[+] Assessment Complete
-
-    Findings Exported : 1
-    JSON Output       : <domain>.json
-    HTML Output       : <domain>.html
-```
-
-The HTML report includes the executive summary, technical commentary,
-recommendations and findings. The following are illustrative excerpts:
+The HTML report includes the executive summary, technical commentary and
+recommendations, with buttons to copy narrative sections as
+Markdown. Reports and findings are written to an `email-audit` directory
+under the current directory, with a matching timestamp in each filename.
+The following are illustrative excerpts:
 
 ```text
 ## Executive Summary
 
-An email security review was performed against the <domain> domain to assess the implementation of industry-standard email authentication and transport security controls.
+An email security review was performed for <domain> to assess how well the organisation protects its email communications and recipients.
 
-The assessment identified the implementation of SPF, DKIM and DMARC controls designed to reduce the risk of domain spoofing and improve confidence in the authenticity of email communications.
+Measures to help recipients verify the origin of email were identified. The supplied email passed the checks recorded for that message, but this does not demonstrate that fraudulent messages will always be blocked.
 
-Successful SPF, DKIM and DMARC validation was observed within the supplied email sample, indicating that the authentication controls were functioning as intended.
+The review also identified areas where email security could be strengthened. Additional protection for email in transit was not identified, increasing the possibility that messages could be intercepted or altered.
 
-No MTA-STS policy was identified. This may reduce assurance that email communications are consistently delivered using trusted encrypted channels between mail systems.
-
-Overall, the domain demonstrated a generally mature email security posture with effective email authentication controls, although opportunities were identified to further strengthen email transport security.
+Overall, further action is needed to improve confidence in the security of email communications.
 ```
 
 ```text

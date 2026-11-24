@@ -1,6 +1,7 @@
 """Consistent Rich console output for email assessments."""
 
 from rich.console import Console
+from rich.table import Table
 from rich.text import Text
 
 console = Console()
@@ -26,7 +27,7 @@ def print_info(message):
 
 
 def print_section(title):
-    console.print(Text(f"=== {title} ===", style="bold cyan"))
+    console.print(Text(f"\n[{title}]", style="bold cyan"))
     console.print()
 
 
@@ -37,23 +38,17 @@ def print_domain_header(domain):
 def print_assessment(result):
     print_section(result["control"])
 
+    table = Table()
+    table.add_column("Field", style="cyan", no_wrap=True)
+    table.add_column("Details", overflow="fold")
+
     if result["raw"]:
-        console.print("Raw Record:", style="bold")
-        console.print(result["raw"], markup=False)
-        console.print()
-
-    console.print("Breakdown:", style="bold")
-    for item in result["breakdown"]:
-        console.print(f"  - {item}", markup=False)
-    console.print()
-
-    console.print("Security Impact:", style="bold")
-    console.print(f"  {result['impact']}", markup=False)
-    console.print()
-
-    console.print("Assessment:", style="bold")
-    console.print(Text("  ") + colour_assessment(result["assessment"]))
-    console.print()
+        table.add_row("Record", Text(result["raw"]))
+    if result["breakdown"]:
+        table.add_row("Details", Text("\n".join(result["breakdown"])))
+    if result["assessment"] in {"UNKNOWN", "INVALID"} and result["impact"]:
+        table.add_row("Note", Text(result["impact"]))
+    console.print(table)
 
 
 def print_completion_summary(

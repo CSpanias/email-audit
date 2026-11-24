@@ -93,12 +93,13 @@ def build_findings(
 # JSON Export
 # ---------------------------------------------------------------------------
 
-def export_json(domain, findings):
+def export_json(domain, findings, filename=None):
     """
     Export assessment findings to JSON format.
     """
 
-    filename = f"{domain}.json"
+    if filename is None:
+        filename = f"{domain}.json"
 
     with open(filename, "w", encoding="utf-8") as handle:
 

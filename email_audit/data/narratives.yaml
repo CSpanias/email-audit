@@ -118,71 +118,44 @@ commentary:
     testing_did_not_identify_evidence_that_a: Testing did not identify evidence that a spoofed email could
       be successfully delivered.
 executive_summary:
-  build_executive_summary:
-    an_email_security_review_was_performed_against: An email security review was performed against the
-      {domain} domain to assess the implementation and effectiveness of industry-standard email authentication
-      and transport security controls.
-    spf_dkim_and_dmarc_controls_were_identified: 'SPF, DKIM and DMARC controls were identified during
-      the assessment. '
-    the_assessment_identified_weaknesses_affecting_the_domain: The assessment identified weaknesses affecting
-      the domain's ability to verify the authenticity of email communications, increasing exposure to
-      spoofing and impersonation attacks.
-    successful_validation_of_these_controls_was_observed: 'Successful validation of these controls was
-      observed in the supplied email sample, providing assurance that they were functioning as intended. '
-    despite_the_presence_of_email_authentication_controls: Despite the presence of email authentication
-      controls, testing identified that emails claiming to originate from the {domain} domain could be
-      successfully spoofed. This increases the risk of phishing, impersonation and business email compromise
-      attacks and indicates that the implemented protections may not be operating effectively in practice.
-    the_assessment_identified_significant_weaknesses_affecting_the: The assessment identified significant
-      weaknesses affecting the domain's email security posture. SPF, DKIM, DMARC and MTA-STS controls
-      were not identified, limiting the ability of receiving organisations to verify the authenticity
-      of email communications and increasing exposure to spoofing and impersonation attacks.
-    mature_with_transport_security: Overall, the domain demonstrated a mature email security
-      posture. Effective authentication and transport security controls were identified and aligned with
-      recognised industry practices, significantly reducing exposure to spoofing, impersonation and email-based
-      threats.
-    collectively_these_controls_align_with_recognised_industry: Collectively, these controls align with
-      recognised industry practices and significantly reduce exposure to domain spoofing, impersonation
-      attacks and fraudulent email activity.
-    validation_of_one_or_more_email_authentication: Validation of one or more email authentication controls
-      was unsuccessful, indicating that the implemented controls may not be operating as intended and
-      reducing confidence in the effectiveness of the domain's anti-spoofing protections.
-    email_authentication_controls_were_identified_however_the: Email authentication controls were identified;
-      however, the supplied email sample did not contain sufficient authentication results to validate
-      their operation.
-    mta_sts_missing: The assessment also identified an opportunity to
-      further strengthen email security. No MTA-STS policy was identified. Whilst this does not affect
-      the effectiveness of email authentication controls, it reduces assurance that email communications
-      are consistently protected against downgrade or interception risks during transit between mail systems.
-    mature_without_transport_security: Overall, the domain demonstrated a mature email
-      security posture. Effective authentication controls were implemented and observed to be functioning
-      correctly, significantly reducing exposure to spoofing and impersonation attacks. Addressing the
-      remaining transport-security weakness would further improve assurance that email communications
-      remain secure throughout delivery and strengthen resilience against email-based threats.
-    specifically_spf_evaluation_resulted_in_a_temporary: ' Specifically, SPF evaluation resulted in a
-      temporary processing error, preventing successful validation of the configured SPF policy.'
-    mta_sts_unconfirmed: The assessment also identified an opportunity
-      to further strengthen email security. An MTA-STS DNS record was identified; however, the associated
-      policy could not be validated. Consequently, it was not possible to confirm that the control was
-      operating as intended.
-    the_assessment_also_identified_effective_email_transport: The assessment also identified effective
-      email transport security controls through the implementation of MTA-STS. This provides additional
-      assurance that email communications remain protected whilst in transit between mail systems.
-    authentication_failed_spoof_delivered: Overall, the domain demonstrated a generally mature
-      email security posture. Authentication controls were identified; however, validation was not fully
-      successful and a controlled spoofing assessment demonstrated that emails claiming to originate from
-      the domain could be successfully spoofed. These observations reduce assurance that the implemented
-      controls are operating as intended.
-    authentication_failed: Overall, the domain demonstrated a generally
-      mature email security posture. Authentication controls were identified; however, one or more validation
-      checks were unsuccessful, reducing assurance that the controls are operating as intended.
-    overall_the_domain_demonstrated_a_generally_effective: Overall, the domain demonstrated a generally
-      effective email security posture; however, opportunities remain to further reduce exposure to spoofing,
-      impersonation and other email-based threats.
-    overall_the_domain_demonstrated_a_weak_email: Overall, the domain demonstrated a weak email security
-      posture. The absence of key authentication and transport security controls increases the likelihood
-      of email spoofing, impersonation attacks and loss of trust in email communications originating from
-      the domain.
+  introduction: An email security review was performed for {domain} to assess how well the organisation
+    protects its email communications and recipients.
+  controls_present: Measures to help recipients verify the origin of email were identified.
+  controls_unconfirmed: Not all measures to help recipients verify the origin of email could be confirmed.
+  sample_passed: The supplied email passed the checks recorded for that message, but this does not
+    demonstrate that fraudulent messages will always be blocked.
+  sample_failed: One or more checks recorded for the supplied email failed and should be investigated.
+  sample_incomplete: The supplied email did not contain enough information to determine the outcome of
+    all relevant checks.
+  sample_not_supplied: No email sample was supplied to check how these measures operated for a message.
+  impersonation_delivered: In a separate test, a message pretending to come from {domain} was delivered.
+    This demonstrates that a fraudulent message could reach a recipient, increasing the risk of deception,
+    disclosure of sensitive information and financial loss.
+  impersonation_not_delivered: A separate impersonation test did not result in confirmed delivery.
+    This does not rule out fraudulent messages reaching other recipients.
+  additional_issues: The review also identified areas where email security could be strengthened.
+  sender_protection_weak: Some measures for identifying fraudulent messages are not sufficiently
+    restrictive, increasing the risk of impersonation.
+  sender_protection_unconfirmed: The effectiveness of some measures for identifying fraudulent messages
+    could not be confirmed.
+  transport_missing: Additional protection for email in transit was not identified, increasing the
+    possibility that messages could be intercepted or altered.
+  transport_not_enforced: Additional protection for email in transit was not fully enforced, increasing
+    the possibility that messages could be intercepted or altered.
+  transport_unconfirmed: Additional protection for email in transit could not be confirmed, limiting
+    assurance that messages are protected from interception or alteration.
+  weak_signing_key: A weak safeguard used to verify messages could undermine confidence in their origin
+    and integrity.
+  delivery_reporting_unavailable: Problems protecting email in transit may go unreported, delaying their
+    discovery and resolution.
+  delivery_reporting_unconfirmed: Reporting of problems protecting email in transit could not be confirmed,
+    limiting confidence that such problems would be identified promptly.
+  conclusion_impersonation: Overall, the successful impersonation test shows that further action is needed
+    to reduce the risk of fraudulent email reaching recipients.
+  conclusion_improvements: Overall, further action is needed to improve confidence in the security of
+    email communications.
+  conclusion: Overall, the review provides a snapshot of email security. Continued monitoring and periodic
+    testing are needed to maintain confidence in these protections.
 remediation:
   build_recommendations:
     the_identified_weaknesses_should_be_addressed_to: 'The identified weaknesses should be addressed to

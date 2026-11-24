@@ -4,6 +4,8 @@ Command-line interface for Email-Audit.
 
 import argparse
 import os
+from datetime import datetime
+from pathlib import Path
 from textwrap import dedent
 
 from rich_argparse import RawDescriptionRichHelpFormatter
@@ -173,6 +175,7 @@ def main():
 
     args = parse_arguments()
 
+    console.print()
     print_info(
         f"Retrieving DNS records and analysing email controls for the {args.domain} domain..."
     )
@@ -277,10 +280,16 @@ def main():
         spoof_result,
     )
 
+    output_dir = Path("email-audit")
+    output_dir.mkdir(exist_ok=True)
+    prefix = output_dir / f"{args.domain}-{datetime.now():%Y%m%d-%H%M%S-%f}"
+
     if args.csacyber:
-        findings_file, exported_count = export_sureformat(args.domain, findings)
+        findings_file, exported_count = export_sureformat(
+            args.domain, findings, filename=f"{prefix}.xml"
+        )
     else:
-        findings_file = export_json(args.domain, findings)
+        findings_file = export_json(args.domain, findings, filename=f"{prefix}.json")
         exported_count = len(findings)
 
     html_file = export_html(
@@ -291,6 +300,7 @@ def main():
         findings,
         auth_results,
         spoof_result,
+        filename=f"{prefix}.html",
     )
 
     # --------------------------------------------------------------------------

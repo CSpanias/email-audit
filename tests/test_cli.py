@@ -7,6 +7,8 @@ import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
+from datetime import datetime
+from pathlib import Path
 from unittest.mock import patch
 
 from rich.console import Console
@@ -53,7 +55,22 @@ class CliTests(unittest.TestCase):
             ])
         self.assertIn("v=spf1 [test] -all", output.getvalue())
         self.assertIn("[test]", output.getvalue())
+        self.assertIn("[SPF]", output.getvalue())
+        self.assertNotIn("Security Impact:", output.getvalue())
+        self.assertNotIn("Assessment:", output.getvalue())
         self.assertNotIn("\x1b[", output.getvalue())
+
+    def test_inconclusive_check_displays_explanation(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            print_assessment({
+                "control": "TLS-RPT", "raw": "", "breakdown": ["DNS lookup failed: timeout"],
+                "assessment": "UNKNOWN",
+                "impact": "TLS reporting configuration could not be determined.",
+            })
+        self.assertIn("DNS lookup failed: timeout", output.getvalue())
+        self.assertIn("TLS reporting configuration could not be determined.", output.getvalue())
+        self.assertNotIn("Assessment:", output.getvalue())
 
     def test_sample_workflow_exports_findings_and_html(self):
         with contextlib.ExitStack() as cleanup:
@@ -71,6 +88,11 @@ class CliTests(unittest.TestCase):
                 stack.enter_context(patch("sys.argv", [
                     "email-audit", "example.test", "--email", "sample.eml"
                 ]))
+                clock = stack.enter_context(patch.object(cli, "datetime"))
+                clock.now.side_effect = [
+                    datetime(2026, 1, 2, 3, 4, 5, 1),
+                    datetime(2026, 1, 2, 3, 4, 5, 2),
+                ]
                 stack.enter_context(patch.object(cli, "get_spf_record", return_value="v=spf1 -all"))
                 dkim = stack.enter_context(patch.object(
                     cli, "check_dkim_dns", return_value=("sample", "v=DKIM1; p=key", True)
@@ -90,23 +112,31 @@ class CliTests(unittest.TestCase):
                 progress = stack.enter_context(patch.object(cli, "Progress"))
                 stack.enter_context(contextlib.redirect_stdout(output))
                 cli.main()
+                cli.main()
             dkim.assert_any_call("example.test", "sample")
             tracker = progress.return_value.__enter__.return_value
-            self.assertEqual(tracker.update.call_count, 5)
+            self.assertEqual(tracker.update.call_count, 10)
             self.assertEqual(tracker.update.call_args.kwargs["description"], "DNS checks complete")
-            with open("example.test.json", encoding="utf-8") as findings_file:
+            prefix = Path("email-audit") / "example.test-20260102-030405-000001"
+            second_prefix = Path("email-audit") / "example.test-20260102-030405-000002"
+            with open(f"{prefix}.json", encoding="utf-8") as findings_file:
                 findings = json.load(findings_file)
             self.assertEqual(findings["domain"], "example.test")
             self.assertEqual(findings["findings"][0]["id"], "email-audit")
-            with open("example.test.html", encoding="utf-8") as report_file:
+            with open(f"{prefix}.html", encoding="utf-8") as report_file:
                 report = report_file.read()
+            self.assertTrue(Path(f"{second_prefix}.json").is_file())
+            self.assertTrue(Path(f"{second_prefix}.html").is_file())
             self.assertIn("<h2>Executive Summary</h2>", report)
             self.assertIn("<h2>Technical Commentary</h2>", report)
             self.assertIn("<h2>Recommendations</h2>", report)
-            self.assertIn("<h2>Findings</h2>", report)
+            self.assertNotIn("<h2>Findings</h2>", report)
             self.assertIn("Authentication", output.getvalue())
             self.assertIn("PASS", output.getvalue())
             self.assertIn("Assessment Complete", output.getvalue())
+            self.assertIn(f"{prefix}.json", output.getvalue())
+            self.assertIn(f"{prefix}.html", output.getvalue())
+            self.assertTrue(output.getvalue().startswith("\n"))
             self.assertNotIn("Overall Security Posture", output.getvalue())
 
     def test_csacyber_writes_xml_and_html_instead_of_json(self):
@@ -126,9 +156,13 @@ class CliTests(unittest.TestCase):
 
             cli.main()
 
-            self.assertTrue(os.path.isfile("example.test.html"))
-            self.assertFalse(os.path.exists("example.test.json"))
-            root = ET.parse("example.test.xml").getroot()
+            html_files = list(Path("email-audit").glob("example.test-*.html"))
+            xml_files = list(Path("email-audit").glob("example.test-*.xml"))
+            self.assertEqual(len(html_files), 1)
+            self.assertEqual(len(xml_files), 1)
+            self.assertEqual(html_files[0].stem, xml_files[0].stem)
+            self.assertFalse(list(Path("email-audit").glob("*.json")))
+            root = ET.parse(xml_files[0]).getroot()
             ids = [node.get("id") for node in root.findall(".//vulnerability")]
             self.assertEqual(ids, ["SC-2157", "SC-2090", "SC-2165", "SC-2166", "SC-6842", "SC-6840"])
             self.assertIn("XML Output", output.getvalue())
@@ -138,6 +172,7 @@ class CliTests(unittest.TestCase):
         terminal = io.StringIO()
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch("sys.argv", ["email-audit", "example.test"]))
+            stack.enter_context(patch.object(cli.Path, "mkdir"))
             stack.enter_context(patch.object(cli, "console", Console(file=terminal, force_terminal=True)))
             for name in (
                 "get_spf_record", "get_dmarc_record", "check_mta_sts",

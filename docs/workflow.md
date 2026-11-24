@@ -37,13 +37,16 @@ recipient when prompted.
 
 ## Output
 
-Files are written in the current directory and existing files with the same
-names are overwritten:
+Files are written to an `email-audit` directory within the current directory.
+Each assessment uses the same local timestamp (`YYYYMMDD-HHMMSS-microseconds`)
+for its report and findings, for example:
 
-- `<domain>.html`: a self-contained report with control assessments, executive
-  summary, technical commentary, recommendations and findings.
-- `<domain>.json`: findings, by default.
-- `<domain>.xml`: SureFormat findings when `--csacyber` is supplied instead
+- `<domain>-<timestamp>.html`: a self-contained report with control assessments, executive
+  summary, technical commentary and recommendations. Use the
+  per-section or combined copy controls to copy the report narrative as
+  Markdown; clipboard access depends on browser permissions.
+- `<domain>-<timestamp>.json`: findings, by default.
+- `<domain>-<timestamp>.xml`: SureFormat findings when `--csacyber` is supplied instead
   of the JSON export. Unmapped findings are reported as warnings.
 
 Console evidence tables are displayed when an email sample is supplied.

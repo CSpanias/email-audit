@@ -8,6 +8,7 @@ dist/
 *.egg-i*fo/
 
 # Test exports
+/email-audit/
 *.xml
 *.eml
 *.msg
